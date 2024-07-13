@@ -1,0 +1,234 @@
+#!/bin/bash
+
+
+echo "Designed for CentOS"
+[ -e "openstack_passwords" ] && .openstack_passwords
+
+#check for internet access
+echo "Checking for internet ..."
+wget -q --spider http://centos.org
+if [ $? != 0 ]; then
+	echo "no internet connection"
+	exit 1
+fi
+
+generatepasswords() {
+[ -e "openstack_passwords" ] && $(mv openstack_passwords openstack_passwords.bak)
+echo "# Database password (no variable used) 
+# Root password for the database
+
+" >> openstack_passwords
+
+admin_pass=$(openssl rand -hex 10)
+echo "# Password of user admin
+ADMIN_PASS=$admin_pass
+
+" >> openstack_passwords
+
+cinder_dbpass=$(openssl rand -hex 10)
+echo "# Database password for the Block Storage service
+CINDER_DBPASS=$cinder_dbpass
+
+" >> openstack_passwords
+
+cinder_pass=$(openssl rand -hex 10)
+echo "# Password of Block Storage service user cinder
+CINDER_PASS=$cinder_pass
+
+" >> openstack_passwords
+
+dash_dbpass=$(openssl rand -hex 10)
+echo "# Database password for the Dashboard
+DASH_DBPASS=$dash_dbpass
+
+" >> openstack_passwords
+
+demo_pass=$(openssl rand -hex 10)
+echo "# Password of user demo
+DEMO_PASS=$demo_pass
+
+" >> openstack_passwords
+
+glance_dbpass=$(openssl rand -hex 10)
+echo "# Database password for Image service
+GLANCE_DBPASS=$glance_dbpass
+
+" >> openstack_passwords
+
+glance_pass=$(openssl rand -hex 10)
+echo "# Password of Image service user glance
+GLANCE_PAS=$glance_pass
+
+" >> openstack_passwords
+
+keystone_dbpass=$(openssl rand -hex 10)
+echo "# Database password of Identity service
+KEYSTONE_DBPASS=$keystone_dbpass
+
+" >> openstack_passwords
+
+metadata_secret=$(openssl rand -hex 10)
+echo "# Secret for the metadata proxy
+METADATA_SECRET=$metadata_secret
+
+" >> openstack_passwords
+
+neutron_dbpass=$(openssl rand -hex 10)
+echo "# Database password for the Networking service
+NEUTRON_DBPASS=$neutron_dbpass
+
+" >> openstack_passwords
+
+neutron_pass=$(openssl rand -hex 10)
+echo "# Password of Networking service user neutron
+NEUTRON_PASS=$neutron_pass
+
+" >> openstack_passwords
+	
+nova_dbpass=$(openssl rand -hex 10)
+echo "# Database password for Compute service
+NOVA_DBPASS=$nova_dbpass
+
+" >> openstack_passwords
+
+nova_pass=$(openssl rand -hex 10)
+echo "# Password of Compute service user nova
+NOVA_PASS=$nova_pass" >> openstack_passwords
+
+placement_pass=$(openssl rand -hex 10)
+echo "# Password of the Placement service user placement
+PLACEMENT_PASS=$placement_pass
+
+" >> openstack_passwords
+
+rabbit_pass=$(openssl rand -hex 10)
+echo "# Password of RabbitMQ user openstack
+RABBIT_PASS=$rabbit_pass
+
+" >> openstack_passwords
+
+echo "Your passwords are in the file $(pwd)/openstack_passwords"
+}
+
+base() {
+# install base node packages
+dnf upgrade -y
+dnf install -y dnf-plugins-core
+dnf config-manager --set-enabled crb
+dnf install -y centos-release-openstack-$release
+dnf upgrade
+dnf install -y install python3-openstackclient dnf install openstack-selinux
+}
+
+controller() {
+
+# MariaDB
+dnf install -y mariadb mariadb-server python3-PyMySQL 
+[ -e "/etc/my.cnf.d/openstack.cnf" ] && $(mv /etc/my.cnf.d/openstack.cnf /etc/my.cnf.d/openstack.bak)
+echo "[mysqld]
+bind-address = 10.0.0.11
+
+default-storage-engine = innodb
+innodb_file_per_table = on
+max_connections = 4096
+collation-server = utf8_general_ci
+character-set-server = utf8" > /etc/my.cnf.d/openstack.cnf
+systemctl enable --now mariadb.service
+mysql_secure_installation
+
+# Message Queue - Rabbit MQ
+dnf install -y rabbitmq-server
+systemctl enable --now rabbitmq-server
+rabbitmqctl add_user openstack $RABBIT_PASS
+rabbitmqctl set_permissions openstack ".*" ".*" ".*"
+
+# Memcached
+dnf install -y memcached python3-memcached
+sed s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
+ystemctl enable --now memcached.service
+
+# ETCd
+dnf install -y etcd
+sed s/^[^#]/#/ /etc/etcd/etcd.conf
+[ -z "$controllerip" ] && echo -n "Enter controller ip" && read controllerip
+echo "#[Member]
+ETCD_DATA_DIR=\"/var/lib/etcd/default.etcd\"
+ETCD_LISTEN_PEER_URLS=\"http://$controllerip:2380\"
+ETCD_LISTEN_CLIENT_URLS=\"http://$controllerip:2379\"
+ETCD_NAME=\"controller\"
+#[Clustering]
+ETCD_INITIAL_ADVERTISE_PEER_URLS=\"http://$controllerip:2380\"
+ETCD_ADVERTISE_CLIENT_URLS=\"http://$controllerip:2379\"
+ETCD_INITIAL_CLUSTER=\"controller=http://$controllerip:2380\"
+ETCD_INITIAL_CLUSTER_TOKEN=\"etcd-cluster-01\"
+ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
+systemctl enable --now etcd
+}
+
+showips() {
+echo "# controller
+$controllerip	controller	
+
+# compute
+$computeip	compute
+
+# block storage
+$blockstoreip	blockstore
+
+# object storage
+$objectstoreip	objectstore"
+}
+
+writehosts() {
+echo -n "Enter IP for controller node I : "
+read controllerip
+echo -n "Enter IP for compute node 1 : "
+read computeip
+echo -n "Enter IP for block storage node 1 : "
+read blockstorageip
+echo -n "Enter IP for object storage node 1 : "
+read objectstoreip
+showips
+echo -n "Append to hosts file? (y/n) : "
+read append
+[ "$append" == "y" ] && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
+}
+
+setvars() {
+# what is being installed
+echo -n "Which Openstack Release? : "
+read release
+echo -n "Openstack Node (controller compute block object) : "
+read node
+echo -n "Set node IPs and optionally write to hosts file? y/n : "
+read hostsfile
+[ "$hostsfile" == "y" ] && writehosts
+}
+
+viewvars() {
+# test for empty variables
+echo "openstack release to install=$release"
+echo "node to install=$node"
+echo "controller node IP=$controllerip"
+echo "compute node IP=$computeip"
+echo "block storage node IP=$blockstoreip"
+echo "object storage IP=$objectstoreip"
+echo -n "continue with current values? : "
+read install
+[ "$install" == "n" ] && setvars 
+}
+
+echo "NOTE: if 'openstack_passwords' exists in the current directory it is automatically included"
+echo -n "generate passwords file? (y/n)"
+read gen
+[ "$gen" == "y" ] && generatepasswords
+
+viewvars
+[ "$? > "0" ] && echo "error, goodbye" && exit || echo "setting up base packages..."
+sleep 1
+#base
+[ "$? > "0" ] && echo "error, goodbye" && exit || echo "setting up $node packages..."
+sleep 1
+#$node
+
+[ "$?" -gt "0" ] || echo "success!"
