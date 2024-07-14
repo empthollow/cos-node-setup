@@ -2,7 +2,8 @@
 
 
 echo "Designed for CentOS"
-[ -e "openstack_passwords" ] && .openstack_passwords
+[ -e "openstack_passwords" ] && . openstack_passwords
+[ -e "openstack_vars" ] && . openstack_vars
 
 #check for internet access
 echo "Checking for internet ..."
@@ -115,9 +116,13 @@ base() {
 dnf upgrade -y
 dnf install -y dnf-plugins-core
 dnf config-manager --set-enabled crb
+[ "$?" -gt "0" ] && echo "base error, goodbye" && exit 
+dnf upgrade -y
 dnf install -y centos-release-openstack-$release
-dnf upgrade
-dnf install -y install python3-openstackclient dnf install openstack-selinux
+[ "$?" -gt "0" ] && echo "base error, goodbye" && exit 
+dnf install -y python3-openstackclient openstack-selinux
+[ "$?" -gt "0" ] && echo "base error, goodbye" && exit 
+dnf install -y python3-openstackclient openstack-selinux
 }
 
 controller() {
@@ -135,21 +140,25 @@ collation-server = utf8_general_ci
 character-set-server = utf8" > /etc/my.cnf.d/openstack.cnf
 systemctl enable --now mariadb.service
 mysql_secure_installation
+[ "$?" -gt "0" ] && echo "mariadb error, goodbye" && exit 
 
 # Message Queue - Rabbit MQ
 dnf install -y rabbitmq-server
 systemctl enable --now rabbitmq-server
 rabbitmqctl add_user openstack $RABBIT_PASS
 rabbitmqctl set_permissions openstack ".*" ".*" ".*"
+[ "$?" -gt "0" ] && echo "rabbit error, goodbye" && exit 
 
 # Memcached
 dnf install -y memcached python3-memcached
 sed s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
 ystemctl enable --now memcached.service
+[ "$?" -gt "0" ] && echo "memcached error, goodbye" && exit 
 
 # ETCd
 dnf install -y etcd
-sed s/^[^#]/#/ /etc/etcd/etcd.conf
+[ "$?" -gt "0" ] && echo "etcd  error, goodbye" && exit 
+sed -i s/^[^#]/#/ /etc/etcd/etcd.conf
 [ -z "$controllerip" ] && echo -n "Enter controller ip" && read controllerip
 echo "#[Member]
 ETCD_DATA_DIR=\"/var/lib/etcd/default.etcd\"
@@ -224,11 +233,11 @@ read gen
 [ "$gen" == "y" ] && generatepasswords
 
 viewvars
-[ "$? > "0" ] && echo "error, goodbye" && exit || echo "setting up base packages..."
+echo "setting up base packages..."
 sleep 1
-#base
-[ "$? > "0" ] && echo "error, goodbye" && exit || echo "setting up $node packages..."
+base
+[ "$?" -gt "0" ] && echo "node error, goodbye" && exit || echo "setting up $node packages..."
 sleep 1
-#$node
+$node
 
 [ "$?" -gt "0" ] || echo "success!"
