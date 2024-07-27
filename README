@@ -1,5 +1,5 @@
 This script builds openstack nodes on centos
 CentOS 9 Stream was used for testing
 When openstack_passwords exists, the script will rename the cureent file before creating a new one
-Passwords are generated using openssl to generate 'random' passwords
+Passwords are generated using openssl to generate 'random' passwords !!Backup the file you build with!!
 
