@@ -58,7 +58,7 @@ GLANCE_DBPASS=$glance_dbpass
 
 glance_pass=$(openssl rand -hex 10)
 echo "# Password of Image service user glance
-GLANCE_PAS=$glance_pass
+GLANCE_PASS=$glance_pass
 
 " >> openstack_passwords
 
@@ -127,7 +127,9 @@ dnf install -y python3-openstackclient openstack-selinux
 
 controller() {
 
-# MariaDB
+# Install MariaDB
+echo "setting up mariadb ..."
+
 dnf install -y mariadb mariadb-server python3-PyMySQL 
 [ -e "/etc/my.cnf.d/openstack.cnf" ] && $(mv /etc/my.cnf.d/openstack.cnf /etc/my.cnf.d/openstack.bak)
 echo "[mysqld]
@@ -143,6 +145,8 @@ mysql_secure_installation
 [ "$?" -gt "0" ] && echo "mariadb error, goodbye" && exit 
 
 # Message Queue - Rabbit MQ
+echo "setting up rabbit mq ..."
+
 dnf install -y rabbitmq-server
 systemctl enable --now rabbitmq-server
 rabbitmqctl add_user openstack $RABBIT_PASS
@@ -150,12 +154,16 @@ rabbitmqctl set_permissions openstack ".*" ".*" ".*"
 [ "$?" -gt "0" ] && echo "rabbit error, goodbye" && exit 
 
 # Memcached
+echo "setting up memcached ..."
+
 dnf install -y memcached python3-memcached
 sed s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
-ystemctl enable --now memcached.service
+systemctl enable --now memcached.service
 [ "$?" -gt "0" ] && echo "memcached error, goodbye" && exit 
 
 # ETCd
+echo "setting up ETCd ..."
+
 dnf install -y etcd
 [ "$?" -gt "0" ] && echo "etcd  error, goodbye" && exit 
 sed -i s/^[^#]/#/ /etc/etcd/etcd.conf
@@ -172,6 +180,121 @@ ETCD_INITIAL_CLUSTER=\"controller=http://$controllerip:2380\"
 ETCD_INITIAL_CLUSTER_TOKEN=\"etcd-cluster-01\"
 ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
 systemctl enable --now etcd
+[ "$?" -gt "0" ] && echo "ETCd error, goodbye" && exit 
+
+# Install Keystone
+echo "setting up Keystone ..."
+
+mysql -e "CREATE DATABASE keystone;"
+mysql -e "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' \
+IDENTIFIED BY 'KEYSTONE_DBPASS';"
+mysql -e "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' \
+IDENTIFIED BY 'KEYSTONE_DBPASS';"
+[ "$?" -gt "0" ] && echo "ETCd error, goodbye" && exit 
+dnf install -y openstack-keystone httpd mod_wsgi
+[ "$?" -gt "0" ] && echo "ETCd error, goodbye" && exit 
+
+sed '/\[database\]/a connection = mysql+pymysql://keystone:KEYSTONE_DBPASS@controller/keystone' /etc/keystone/keystone.conf
+sed -i '/\[token\]/a provider = fernet' /etc/keystone/keystone.conf
+su -s /bin/sh -c "keystone-manage db_sync" keystone
+keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
+keystone-manage bootstrap --bootstrap-password ADMIN_PASS \
+  --bootstrap-admin-url http://controller:5000/v3/ \
+  --bootstrap-internal-url http://controller:5000/v3/ \
+  --bootstrap-public-url http://controller:5000/v3/ \
+  --bootstrap-region-id RegionOne
+sed -i '/\#ServerName/a ServerName controller' /etc/httpd/conf/httpd.conf
+ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/
+systemctl enable --now httpd.service
+[ "$?" -gt "0" ] && echo "ETCd error, goodbye" && exit 
+
+# Set Keystone Environment Variables
+echo "setting up Keystone environment variables ..."
+export OS_USERNAME=admin
+export OS_PASSWORD=ADMIN_PASS
+export OS_PROJECT_NAME=admin
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_DOMAIN_NAME=Default
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+
+# Create openrc auth files
+echo "creating openrc auth files for admin and demo in the current directory"
+echo "export OS_PROJECT_DOMAIN_NAME=Default
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=ADMIN_PASS
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+export OS_IMAGE_API_VERSION=2" > admin-openrc
+echo "export OS_PROJECT_DOMAIN_NAME=Default
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_NAME=myproject
+export OS_USERNAME=myuser
+export OS_PASSWORD=DEMO_PASS
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+export OS_IMAGE_API_VERSION=2" > demo-openrc
+
+# Install Glance
+echo "setting up glance"
+mysql -e "CREATE DATABASE glance;"
+mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' \
+  IDENTIFIED BY 'GLANCE_DBPASS';"
+mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
+  IDENTIFIED BY 'GLANCE_DBPASS';"
+#check for admin openrc
+if [ -e "admin-openrc" ]; then
+	echo "admin-openrc found"
+       	source admin-openrc 
+else
+	echo -n "enter path of admin-openrc or equivalent  file > "
+	read osadmin
+	source $osadmin
+	[ "$?" -gt "0" ] && echo "openrc auth error, goodbye" && exit 
+	
+fi
+echo "creating glance user ..."
+openstack user create --domain default --password $GLANCE_PASS
+openstack role add --project service --user glance admin
+[ "$?" -gt "0" ] && echo "glance ueser setup error, goodbye" && exit 
+echo "creating service identity ..."
+openstack service create --name glance --description "OpenStack Image" image
+echo "creating api endpoints"
+openstack endpoint create --region RegionOne image public http://controller:9292
+openstack endpoint create --region RegionOne image internal http://controller:9292
+openstack endpoint create --region RegionOne image admin http://controller:9292
+echo "not setting quota limits - see openstack documentation"
+# Install & Configure components
+echo "installing glance"
+dnf install -y openstack-glance
+[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
+echo "configuring glance files"
+
+}
+
+compute() {
+# Install  Nova
+mysql -e "CREATE DATABASE nova_api;"
+mysql -e "CREATE DATABASE nova;"
+mysql -e "CREATE DATABASE nova_cell0;"
+mysql -e "GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'localhost' \
+  IDENTIFIED BY 'NOVA_DBPASS';"
+mysql -e "GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'%' \
+  IDENTIFIED BY 'NOVA_DBPASS';"
+mysql -e "RANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' \
+  IDENTIFIED BY 'NOVA_DBPASS';"
+mysql -e "GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' \
+  IDENTIFIED BY 'NOVA_DBPASS';"
+mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'localhost' \
+  IDENTIFIED BY 'NOVA_DBPASS';"
+mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
+  IDENTIFIED BY 'NOVA_DBPASS';"
+
+
+
 }
 
 showips() {
@@ -227,7 +350,7 @@ read install
 [ "$install" == "n" ] && setvars 
 }
 
-echo "NOTE: if 'openstack_passwords' exists in the current directory it is automatically included"
+[ -e "openstack_passwords" ] && echo "NOTE: the openstack_passwords file exists and is automatically included"
 echo -n "generate passwords file? (y/n)"
 read gen
 [ "$gen" == "y" ] && generatepasswords
