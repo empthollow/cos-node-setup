@@ -108,7 +108,7 @@ RABBIT_PASS=$rabbit_pass
 
 " >> openstack_passwords
 
-echo "Your passwords are in the file $(pwd)/openstack_passwords"
+echo "Your passwords are in the file $(pwd)\/openstack_passwords"
 }
 
 base() {
@@ -146,6 +146,7 @@ else
 	systemctl enable --now mariadb.service
 	mysql_secure_installation
 	[ "$?" -gt "0" ] && echo "mariadb error, goodbye" && exit 
+fi
 
 # Message Queue - Rabbit MQ
 if [ -n "$(systemctl list-units rabbitmq-server.service --state active | grep -o running)" ]; then
@@ -181,25 +182,25 @@ else
 
 	dnf install -y etcd
 	[ "$?" -gt "0" ] && echo "etcd  error, goodbye" && exit 
-	sed -i s/^[^#]/#/ /etc/etcd/etcd.conf
+	sed -i 's/^[^#]/#/' /etc/etcd/etcd.conf
 	[ -z "$controllerip" ] && echo -n "Enter controller ip" && read controllerip
 	echo "#[Member]
-	ETCD_DATA_DIR=\"/var/lib/etcd/default.etcd\"
-	ETCD_LISTEN_PEER_URLS=\"http://$controllerip:2380\"
-	ETCD_LISTEN_CLIENT_URLS=\"http://$controllerip:2379\"
-	ETCD_NAME=\"controller\"
-	#[Clustering]
-	ETCD_INITIAL_ADVERTISE_PEER_URLS=\"http://$controllerip:2380\"
-	ETCD_ADVERTISE_CLIENT_URLS=\"http://$controllerip:2379\"
-	ETCD_INITIAL_CLUSTER=\"controller=http://$controllerip:2380\"
-	ETCD_INITIAL_CLUSTER_TOKEN=\"etcd-cluster-01\"
-	ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
+ETCD_DATA_DIR=\"/var/lib/etcd/default.etcd\"
+ETCD_LISTEN_PEER_URLS=\"http://$controllerip:2380\"
+ETCD_LISTEN_CLIENT_URLS=\"http://$controllerip:2379\"
+ETCD_NAME=\"controller\"
+#[Clustering]
+ETCD_INITIAL_ADVERTISE_PEER_URLS=\"http://$controllerip:2380\"
+ETCD_ADVERTISE_CLIENT_URLS=\"http://$controllerip:2379\"
+ETCD_INITIAL_CLUSTER=\"controller=http://$controllerip:2380\"
+ETCD_INITIAL_CLUSTER_TOKEN=\"etcd-cluster-01\"
+ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
 	systemctl enable --now etcd
 	[ "$?" -gt "0" ] && echo "ETCd error, goodbye" && exit 
 fi
 
 # Install Keystone
-if [ -f /etc/httpd/conf.d/wsgi-keystone.conf and -n "$(systemctl list-units httpd.service --state active | grep -o running)" ]; then
+if [ -f "/etc/httpd/conf.d/wsgi-keystone.conf" ] && [ -n "$(systemctl list-units httpd.service --state active | grep -o running)" ]; then
 	echo "$(systemctl list-units httpd.service --state active | grep running) for keystone"
 else
 	echo "setting up Keystone ..."
@@ -257,7 +258,7 @@ export OS_PASSWORD=DEMO_PASS
 export OS_AUTH_URL=http://controller:5000/v3
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > demo-openrc
-	echo "$(pwd)\/demo-openrc created"
+	echo "$(pwd)/demo-openrc created"
 	sleep 4
 fi
 
@@ -280,8 +281,8 @@ else
 		read osadmin
 		source $osadmin
 		[ "$?" -gt "0" ] && echo "openrc auth error, goodbye" && exit 
-		
 	fi
+		
 	echo "creating glance user ..."
 	openstack user create --domain default --password $GLANCE_PASS glance
 	openstack role add --project service --user glance admin
@@ -311,7 +312,7 @@ username = glance
 password = $GLANCE_PASS' /etc/glance-api-conf
 	sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 	sed -i '/^\#default_backend/a default_backend\ =\ fs' /etc/glance/glance-api.conf
-	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir\ = \/var\/lib\/glance\/images\//' /etc/glance/glance-api.conf
+	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images\//@' /etc/glance/glance-api.conf
 	sed -i '/^\[oslo_limit\]/a auth_url = http://controller:5000
 auth_type = password
 user_domain_id = default
@@ -330,7 +331,9 @@ region_name = RegionOne' /etc/glance/glance-api.conf
 	systemctl enable --now openstack-glance-api.service
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
 fi
+
 }
+
 
 compute() {
 # Install  Nova
@@ -349,9 +352,6 @@ mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'localhost' \
   IDENTIFIED BY '$NOVA_DBPASS';"
 mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
   IDENTIFIED BY '$NOVA_DBPASS';"
-
-
-
 }
 
 showips() {
