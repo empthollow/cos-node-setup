@@ -378,9 +378,6 @@ read blockstorageip
 echo -n "Enter IP for object storage node 1 : "
 read objectstoreip
 showips
-echo -n "Append to hosts file? (y/n) : "
-read append
-[ "$append" == "y" ] && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
 }
 
 setvars() {
@@ -410,17 +407,47 @@ read install
 [ "$install" == "n" ] && setvars 
 }
 
+viewpasswords() {
+echo $ADMIN_PASS
+echo $CINDER_DBPASS
+echo $CINDER_PASS
+echo $DASH_DBPASS
+echo $DEMO_PASS
+echo $GLANCE_DBPASS
+echo $GLANCE_PASS
+echo $KEYSTONE_DBPASS
+echo $METADATA_SECRET
+echo $NEUTRON_DBPASS
+echo $NEUTRON_PASS
+echo $NOVA_DBPASS
+echo $NOVA_PASS
+echo $PLACEMENT_PASS
+echo $RABBIT_PASS
+checkpasswords
+}
+
+checkpasswords() {
 [ -e "openstack_passwords" ] && echo "NOTE: the openstack_passwords file exists and is automatically included"
-echo -n "generate passwords file? (y/n)"
+echo -n "generate passwords file? (y/n) >"
 read gen
 [ "$gen" == "y" ] && generatepasswords
+echo -n "view passwords? (y/n) >"
+read viewpw
+[ "$viewpw" == "y" ] && viewpasswords
+}
+
+
+
 
 viewvars
+[echo -n "Append IPs to hosts file? (y/n) : "
+read append
+[ "$append" == "y" ] && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
+[ "$?" -gt "0" ] && exit 
 echo "setting up base packages..."
 sleep 1
 base
 [ "$?" -gt "0" ] && echo "node error, goodbye" && exit || echo "setting up $node packages..."
 sleep 1
 $node
-
 [ "$?" -gt "0" ] || echo "success!"
