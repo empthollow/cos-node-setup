@@ -406,6 +406,7 @@ echo "block storage node IP=$blockstoreip"
 echo "object storage IP=$objectstoreip"
 echo -n "continue with current values? : "
 read install
+[ "$?" -gt "0" ] &&  && exit 
 [ "$install" == "n" ] && setvars 
 }
 
