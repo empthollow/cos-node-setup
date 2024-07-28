@@ -107,7 +107,7 @@ echo "# Password of RabbitMQ user openstack
 RABBIT_PASS=$rabbit_pass
 
 " >> openstack_passwords
-
+. openstack_passwords
 echo "Your passwords are in the file $(pwd)\/openstack_passwords"
 }
 
