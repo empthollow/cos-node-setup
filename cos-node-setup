@@ -144,10 +144,9 @@ else
 	collation-server = utf8_general_ci
 	character-set-server = utf8" > /etc/my.cnf.d/openstack.cnf
 	systemctl enable --now mariadb.service
-	mysql -e "DELETE FROM mysql.user WHERE User='';"
-	mysql -e "DROP DATABASE test;"
-	mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
-	mysql -e "  MariaDB> DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+	#mysql -e "DELETE FROM mysql.user WHERE User='';"
+	#mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+	#mysql -e "  MariaDB> DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
 	[ "$?" -gt "0" ] && echo "mariadb error, goodbye" && exit 
 fi
 
@@ -210,9 +209,9 @@ else
 
 	mysql -e "CREATE DATABASE keystone;"
 	mysql -e "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' \
-	IDENTIFIED BY 'KEYSTONE_DBPASS';"
+	IDENTIFIED BY '$KEYSTONE_DBPASS';"
 	mysql -e "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'%' \
-	IDENTIFIED BY 'KEYSTONE_DBPASS';"
+	IDENTIFIED BY '$KEYSTONE_DBPASS';"
 	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 	dnf install -y openstack-keystone httpd mod_wsgi
 	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
@@ -222,7 +221,7 @@ else
 	su -s /bin/sh -c "keystone-manage db_sync" keystone
 	keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
 	keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
-	keystone-manage bootstrap --bootstrap-password ADMIN_PASS \
+	keystone-manage bootstrap --bootstrap-password $ADMIN_PASS \
 	  --bootstrap-admin-url http://controller:5000/v3/ \
 	  --bootstrap-internal-url http://controller:5000/v3/ \
 	  --bootstrap-public-url http://controller:5000/v3/ \
@@ -235,33 +234,35 @@ else
 	# Set Keystone Environment Variables
 	echo "setting up Keystone environment variables ..."
 	export OS_USERNAME=admin
-	export OS_PASSWORD=ADMIN_PASS
+	export OS_PASSWORD=$ADMIN_PASS
 	export OS_PROJECT_NAME=admin
 	export OS_USER_DOMAIN_NAME=Default
 	export OS_PROJECT_DOMAIN_NAME=Default
 	export OS_AUTH_URL=http://controller:5000/v3
 	export OS_IDENTITY_API_VERSION=3
 
-	# Create openrc auth files
-	echo "creating openrc auth files for admin and demo in the current directory"
+	# Create myuser and openrc auth files
+	echo "creating myuser and openrc auth files in the current directory"
+	openstack user create $myuser
+	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 	echo "export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=admin
 export OS_USERNAME=admin
-export OS_PASSWORD=ADMIN_PASS
+export OS_PASSWORD=$ADMIN_PASS
 export OS_AUTH_URL=http://controller:5000/v3
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > admin-openrc
-	echo "$(pwd)/admin-openrc created"
+	echo "**** $(pwd)/admin-openrc created ****"
 	echo "export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=myproject
-export OS_USERNAME=myuser
-export OS_PASSWORD=DEMO_PASS
+export OS_USERNAME=$myuser
+export OS_PASSWORD=$MYUSER_PASS
 export OS_AUTH_URL=http://controller:5000/v3
 export OS_IDENTITY_API_VERSION=3
-export OS_IMAGE_API_VERSION=2" > demo-openrc
-	echo "$(pwd)/demo-openrc created"
+export OS_IMAGE_API_VERSION=2" > $myuser-openrc
+	echo "**** $(pwd)/$myuser-openrc created ****"
 	sleep 4
 fi
 
@@ -297,7 +298,7 @@ else
 	openstack endpoint create --region RegionOne image public http://controller:9292
 	openstack endpoint create --region RegionOne image internal http://controller:9292
 	openstack endpoint create --region RegionOne image admin http://controller:9292
-	echo "not setting quota limits - see openstack documentation"
+	echo "**** not setting quota limits - see openstack documentation ****"
 	# Install & Configure components
 	echo "installing glance"
 	dnf install -y openstack-glance
@@ -409,6 +410,7 @@ echo "current IP assignments"
 ip addr show | grep inet
 echo "openstack release to install=$release"
 echo "node to install=$node"
+echo "myuser=$myuser"
 echo "controller node IP=$controllerip"
 echo "compute node IP=$computeip"
 echo "block storage node IP=$blockstoreip"
@@ -420,39 +422,50 @@ read install
 }
 
 viewpasswords() {
-echo $ADMIN_PASS
-echo $CINDER_DBPASS
-echo $CINDER_PASS
-echo $DASH_DBPASS
-echo $DEMO_PASS
-echo $GLANCE_DBPASS
-echo $GLANCE_PASS
-echo $KEYSTONE_DBPASS
-echo $METADATA_SECRET
-echo $NEUTRON_DBPASS
-echo $NEUTRON_PASS
-echo $NOVA_DBPASS
-echo $NOVA_PASS
-echo $PLACEMENT_PASS
-echo $RABBIT_PASS
+echo "ADMIN_PASS = $ADMIN_PASS"
+echo "CINDER_DBPASS = $CINDER_DBPASS"
+echo "CINDER_PASS = $CINDER_PASS"
+echo "DASH_DBPASS = $DASH_DBPASS"
+echo "DEMO_PASS = $DEMO_PASS"
+echo "GLANCE_DBPASS = $GLANCE_DBPASS"
+echo "GLANCE_PASS = $GLANCE_PASS"
+echo "KEYSTONE_DBPASS = $KEYSTONE_DBPASS"
+echo "METADATA_SECRET = $METADATA_SECRET"
+echo "NEUTRON_DBPASS = $NEUTRON_DBPASS"
+echo "NEUTRON_PASS = $NEUTRON_PASS"
+echo "NOVA_DBPASS = $NOVA_DBPASS"
+echo "NOVA_PASS = $NOVA_PASS"
+echo "PLACEMENT_PASS = $PLACEMENT_PASS"
+echo "RABBIT_PASS = $RABBIT_PASS"
 checkpasswords
 }
 
-checkpasswords() {
-[ -e "openstack_passwords" ] && echo "NOTE: the openstack_passwords file exists and is automatically included"
-echo -n "generate passwords file? (y/n) >"
+genask() {
+echo -n "generate new passwords file? (y/n)> "
 read gen
 [ "$gen" == "y" ] && generatepasswords
-echo -n "view passwords? (y/n) >"
-read viewpw
-[ "$viewpw" == "y" ] && viewpasswords
+}
+
+checkpasswords() {
+if [ -e "openstack_passwords" ]; then
+	echo "NOTE: the openstack_passwords file exists and is automatically included"
+else
+	echo "NOTE: the openstack_passwords file does not exist"
+	echo "Generating openstack_passwords file"
+	
+fi
+echo -n "view passwords? (y/n)> "
+	read viewpw
+	[ "$viewpw" == "y" ] && viewpasswords
+
 }
 
 viewvars
+echo "*** current /etc/hosts file ***"
 cat /etc/hosts
-echo -n "Append IPs to hosts file? (y/n) > "
-read append
-[ "$append" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
+echo -n "update hosts file? (y/n)> "
+read update
+[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
 [ "$?" -gt "0" ] && exit 
 checkpasswords
 echo "setting up base packages..."
