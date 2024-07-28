@@ -44,9 +44,9 @@ DASH_DBPASS=$dash_dbpass
 
 " >> openstack_passwords
 
-demo_pass=$(openssl rand -hex 10)
+myuser_pass=$(openssl rand -hex 10)
 echo "# Password of user demo
-DEMO_PASS=$demo_pass
+MYUSER_PASS=$demo_pass
 
 " >> openstack_passwords
 
@@ -125,8 +125,7 @@ dnf install -y python3-openstackclient openstack-selinux
 dnf install -y python3-openstackclient openstack-selinux
 }
 
-controller() {
-
+insmariadb() {
 # Install MariaDB
 if [ -n "$(systemctl list-units mariadb.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units mariadb.service --state active | grep running) ****"
@@ -149,7 +148,9 @@ else
 	#mysql -e "  MariaDB> DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
 	[ "$?" -gt "0" ] && echo "mariadb error, goodbye" && exit 
 fi
+}
 
+insrabbitmq() {
 # Message Queue - Rabbit MQ
 if [ -n "$(systemctl list-units rabbitmq-server.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units rabbitmq-server.service --state active | grep running) ****"
@@ -163,7 +164,9 @@ else
 	[ "$?" -gt "0" ] && echo "rabbit error, goodbye" && exit 
 
 fi
+}
 
+insmemcached() {
 # Memcached
 if [ -n "$(systemctl list-units memcached.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units memcached.service --state active | grep running) ****"
@@ -175,7 +178,9 @@ else
 	systemctl enable --now memcached.service
 	[ "$?" -gt "0" ] && echo "memcached error, goodbye" && exit 
 fi
+}
 
+insetcd() {
 # ETCd
 if [ -n "$(systemctl list-units etcd.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units etcd.service --state active | grep running) ****"
@@ -200,7 +205,9 @@ ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
 	systemctl enable --now etcd
 	[ "$?" -gt "0" ] && echo "ETCd error, goodbye" && exit 
 fi
+}
 
+inskeystone() {
 # Install Keystone
 if [ -f "/etc/httpd/conf.d/wsgi-keystone.conf" ] && [ -n "$(systemctl list-units httpd.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units httpd.service --state active | grep running) for keystone ****"
@@ -265,7 +272,9 @@ export OS_IMAGE_API_VERSION=2" > $myuser-openrc
 	echo "**** $(pwd)/$myuser-openrc created ****"
 	sleep 4
 fi
+}
 
+insglance() {
 # Install Glance
 if [ -n "$(systemctl list-units openstack-glance-api.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units openstack-glance-api.service --state active | grep running) ****"
@@ -305,15 +314,15 @@ else
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
 	echo "configuring glance files"
 	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf
-	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri  = http://controller:5000\
-auth_url = http://controller:5000\
+	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\
+auth_url = http:\/\/controller:5000\
 memcached_servers = controller:11211\
 auth_type = password\
 project_domain_name = Default\
 user_domain_name = Default\
 project_name = service\
 username = glance\
-password = $GLANCE_PASS' /etc/glance-api-conf
+password = "$GLANCE_PASS"' /etc/glance/glance-api.conf
 	sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 	sed -i '/^\#default_backend/a default_backend\ =\ fs' /etc/glance/glance-api.conf
 	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images\//@' /etc/glance/glance-api.conf
@@ -322,7 +331,7 @@ auth_type = password\
 user_domain_id = default\
 username = glance\
 system_scope = all\
-password = $GLANCE_PASS\
+password = "$GLANCE_PASS"\
 endpoint_id = 340be3625e9b4239a6415d034e98aace\
 region_name = RegionOne' /etc/glance/glance-api.conf
 	echo "setting role permissions"
@@ -335,9 +344,17 @@ region_name = RegionOne' /etc/glance/glance-api.conf
 	systemctl enable --now openstack-glance-api.service
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
 fi
-
 }
 
+controller() {
+insmariadb
+insrabbitmq
+insmemcached
+insetcd
+inskeystone
+insglance
+
+}
 
 compute() {
 # Install  Nova
