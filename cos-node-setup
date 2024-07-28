@@ -129,7 +129,7 @@ controller() {
 
 # Install MariaDB
 if [ -n "$(systemctl list-units mariadb.service --state active | grep -o running)" ]; then
-	echo "$(systemctl list-units mariadb.service --state active | grep running)"
+	echo "**** $(systemctl list-units mariadb.service --state active | grep running) ****"
 else	
 	echo "setting up mariadb ..."
 
@@ -153,7 +153,7 @@ fi
 
 # Message Queue - Rabbit MQ
 if [ -n "$(systemctl list-units rabbitmq-server.service --state active | grep -o running)" ]; then
-	echo "$(systemctl list-units rabbitmq-server.service --state active | grep running)"
+	echo "**** $(systemctl list-units rabbitmq-server.service --state active | grep running) ****"
 else
 	echo "setting up rabbit mq ..."
 
@@ -167,7 +167,7 @@ fi
 
 # Memcached
 if [ -n "$(systemctl list-units memcached.service --state active | grep -o running)" ]; then
-	echo "$(systemctl list-units memcached.service --state active | grep running)"
+	echo "**** $(systemctl list-units memcached.service --state active | grep running) ****"
 else
 	echo "setting up memcached ..."
 
@@ -179,7 +179,7 @@ fi
 
 # ETCd
 if [ -n "$(systemctl list-units etcd.service --state active | grep -o running)" ]; then
-	echo "$(systemctl list-units etcd.service --state active | grep running)"
+	echo "**** $(systemctl list-units etcd.service --state active | grep running) ****"
 else
 	echo "setting up ETCd ..."
 
@@ -204,7 +204,7 @@ fi
 
 # Install Keystone
 if [ -f "/etc/httpd/conf.d/wsgi-keystone.conf" ] && [ -n "$(systemctl list-units httpd.service --state active | grep -o running)" ]; then
-	echo "$(systemctl list-units httpd.service --state active | grep running) for keystone"
+	echo "**** $(systemctl list-units httpd.service --state active | grep running) for keystone ****"
 else
 	echo "setting up Keystone ..."
 
@@ -267,7 +267,7 @@ fi
 
 # Install Glance
 if [ -n "$(systemctl list-units openstack-glance-api.service --state active | grep -o running)" ]; then
-	echo "$(systemctl list-units openstack-glance-api.service --state active | grep running)"
+	echo "**** $(systemctl list-units openstack-glance-api.service --state active | grep running) ****"
 else
 	echo "setting up glance"
 	mysql -e "CREATE DATABASE glance;"
@@ -288,6 +288,7 @@ else
 		
 	echo "creating glance user ..."
 	openstack user create --domain default --password $GLANCE_PASS glance
+	openstack project create service
 	openstack role add --project service --user glance admin
 	[ "$?" -gt "0" ] && echo "glance ueser setup error, goodbye" && exit 
 	echo "creating service identity ..."
@@ -301,28 +302,27 @@ else
 	echo "installing glance"
 	dnf install -y openstack-glance
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
-
 	echo "configuring glance files"
 	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf
-	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri  = http://controller:5000
-auth_url = http://controller:5000
-memcached_servers = controller:11211
-auth_type = password
-project_domain_name = Default
-user_domain_name = Default
-project_name = service
-username = glance
+	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri  = http://controller:5000\
+auth_url = http://controller:5000\
+memcached_servers = controller:11211\
+auth_type = password\
+project_domain_name = Default\
+user_domain_name = Default\
+project_name = service\
+username = glance\
 password = $GLANCE_PASS' /etc/glance-api-conf
 	sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 	sed -i '/^\#default_backend/a default_backend\ =\ fs' /etc/glance/glance-api.conf
 	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images\//@' /etc/glance/glance-api.conf
-	sed -i '/^\[oslo_limit\]/a auth_url = http://controller:5000
-auth_type = password
-user_domain_id = default
-username = glance
-system_scope = all
-password = $GLANCE_PASS
-endpoint_id = 340be3625e9b4239a6415d034e98aace
+	sed -i '/^\[oslo_limit\]/a auth_url = http://controller:5000\
+auth_type = password\
+user_domain_id = default\
+username = glance\
+system_scope = all\
+password = $GLANCE_PASS\
+endpoint_id = 340be3625e9b4239a6415d034e98aace\
 region_name = RegionOne' /etc/glance/glance-api.conf
 	echo "setting role permissions"
 	openstack role add --user glance --user-domain Default --system all reader
@@ -454,6 +454,7 @@ echo -n "Append IPs to hosts file? (y/n) > "
 read append
 [ "$append" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
 [ "$?" -gt "0" ] && exit 
+checkpasswords
 echo "setting up base packages..."
 sleep 1
 base
