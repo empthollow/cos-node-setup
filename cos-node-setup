@@ -136,7 +136,7 @@ else
 	dnf install -y mariadb mariadb-server python3-PyMySQL 
 	[ -e "/etc/my.cnf.d/openstack.cnf" ] && $(mv /etc/my.cnf.d/openstack.cnf /etc/my.cnf.d/openstack.bak)
 	echo "[mysqld]
-	bind-address = 10.0.0.11
+	bind-address = $controllerip
 
 	default-storage-engine = innodb
 	innodb_file_per_table = on
@@ -144,7 +144,10 @@ else
 	collation-server = utf8_general_ci
 	character-set-server = utf8" > /etc/my.cnf.d/openstack.cnf
 	systemctl enable --now mariadb.service
-	mysql_secure_installation
+	mysql -e "DELETE FROM mysql.user WHERE User='';"
+	mysql -e "DROP DATABASE test;"
+	mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+	mysql -e "  MariaDB> DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
 	[ "$?" -gt "0" ] && echo "mariadb error, goodbye" && exit 
 fi
 
