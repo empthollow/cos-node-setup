@@ -380,6 +380,15 @@ read objectstoreip
 showips
 }
 
+cleanhosts() {
+sed -i /controller/d /etc/hosts
+sed -i /compute/d /etc/hosts
+sed -i /block\ storage/d /etc/hosts
+sed -i /blockstore/d /etc/hosts
+sed -i /object\ storeage/d /etc/hosts
+sed -i /objectstore/d /etc/hosts
+}
+
 setvars() {
 # what is being installed
 echo -n "Which Openstack Release? : "
@@ -436,13 +445,11 @@ read viewpw
 [ "$viewpw" == "y" ] && viewpasswords
 }
 
-
-
-
 viewvars
-[echo -n "Append IPs to hosts file? (y/n) : "
+cat /etc/hosts
+echo -n "Append IPs to hosts file? (y/n) > "
 read append
-[ "$append" == "y" ] && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
+[ "$append" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
 [ "$?" -gt "0" ] && exit 
 echo "setting up base packages..."
 sleep 1
