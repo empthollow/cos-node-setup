@@ -325,7 +325,6 @@ user_domain_name = Default\
 project_name = service\
 username = glance\
 password = GLANCE_PASS' /etc/glance/glance-api.conf
-	sed -i "s/GLANCE_PASS/$GLANCE_PASS" /etc/glance/glance-api.conf
 	sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 	sed -i '/^\#default_backend/a default_backend\ =\ fs' /etc/glance/glance-api.conf
 	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images\//@' /etc/glance/glance-api.conf
@@ -336,7 +335,7 @@ project_domain_name = Default\
 user_domain_name = Default\
 project_name = service\nusername = glance\
 password = GLANCE_PASS'  /etc/glance/glance-api.conf
-	sed -i "s/GLANCE_PASS/$GLANCE_PASS"
+	sed -i "s/GLANCE_PASS/$GLANCE_PASS/g" /etc/glance/glance-api.conf
 	echo "setting role permissions"
 	openstack role add --user glance --user-domain Default --system all reader
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
