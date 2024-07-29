@@ -223,7 +223,7 @@ else
 	dnf install -y openstack-keystone httpd mod_wsgi
 	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 
-	sed -i '/\[database\]/a connection = mysql+pymysql://keystone:$KEYSTONE_DBPASS@controller/keystone' /etc/keystone/keystone.conf
+	sed -i "/\[database\]/a connection\ =\ mysql\+pymysql:\/\/keystone:$KEYSTONE_DBPASS@controller\/keystone" /etc/keystone/keystone.conf
 	sed -i '/\^[token\]/a provider = fernet' /etc/keystone/keystone.conf
 	su -s /bin/sh -c "keystone-manage db_sync" keystone
 	keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
@@ -314,26 +314,13 @@ else
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
 	echo "configuring glance files"
 	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf
-	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\
-auth_url = http:\/\/controller:5000\
-memcached_servers = controller:11211\
-auth_type = password\
-project_domain_name = Default\
-user_domain_name = Default\
-project_name = service\
-username = glance\
-password = "$GLANCE_PASS"' /etc/glance/glance-api.conf
+	authappend=$(printf "www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS") 
+	sed -i "/^\[keystone_authtoken\]/a $authappend" /etc/glance/glance-api.conf
 	sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 	sed -i '/^\#default_backend/a default_backend\ =\ fs' /etc/glance/glance-api.conf
 	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images\//@' /etc/glance/glance-api.conf
-	sed -i '/^\[oslo_limit\]/a auth_url = http://controller:5000\
-auth_type = password\
-user_domain_id = default\
-username = glance\
-system_scope = all\
-password = "$GLANCE_PASS"\
-endpoint_id = 340be3625e9b4239a6415d034e98aace\
-region_name = RegionOne' /etc/glance/glance-api.conf
+	osloappend=$(printf "auth_url = http://controller:5000\nauth_type = password\nuser_domain_id = default\nusername = glance\nsystem_scope = all\npassword = $GLANCE_PASS\nendpoint_id = 340be3625e9b4239a6415d034e98aace\nregion_name = RegionOne")
+	sed -i "/^\[oslo_limit\]/a $osloappend" /etc/glance/glance-api.conf
 	echo "setting role permissions"
 	openstack role add --user glance --user-domain Default --system all reader
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
@@ -443,7 +430,7 @@ echo "ADMIN_PASS = $ADMIN_PASS"
 echo "CINDER_DBPASS = $CINDER_DBPASS"
 echo "CINDER_PASS = $CINDER_PASS"
 echo "DASH_DBPASS = $DASH_DBPASS"
-echo "MYUSER_PASS = $DEMO_PASS"
+echo "MYUSER_PASS = $MYUSER_PASS"
 echo "GLANCE_DBPASS = $GLANCE_DBPASS"
 echo "GLANCE_PASS = $GLANCE_PASS"
 echo "KEYSTONE_DBPASS = $KEYSTONE_DBPASS"
