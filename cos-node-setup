@@ -46,7 +46,7 @@ DASH_DBPASS=$dash_dbpass
 
 myuser_pass=$(openssl rand -hex 10)
 echo "# Password of user demo
-MYUSER_PASS=$demo_pass
+MYUSER_PASS=$myuser_pass
 
 " >> openstack_passwords
 
@@ -223,8 +223,8 @@ else
 	dnf install -y openstack-keystone httpd mod_wsgi
 	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 
-	sed -i '/\[database\]/a connection = mysql+pymysql://keystone:KEYSTONE_DBPASS@controller/keystone' /etc/keystone/keystone.conf
-	sed -i '/\[token\]/a provider = fernet' /etc/keystone/keystone.conf
+	sed -i '/\[database\]/a connection = mysql+pymysql://keystone:$KEYSTONE_DBPASS@controller/keystone' /etc/keystone/keystone.conf
+	sed -i '/\^[token\]/a provider = fernet' /etc/keystone/keystone.conf
 	su -s /bin/sh -c "keystone-manage db_sync" keystone
 	keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
 	keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
@@ -470,6 +470,7 @@ if [ -e "openstack_passwords" ]; then
 else
 	echo "NOTE: the openstack_passwords file does not exist"
 	echo "Generating openstack_passwords file"
+	generatepasswords
 	
 fi
 echo -n "view passwords? (y/n)> "
