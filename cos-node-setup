@@ -226,6 +226,7 @@ else
 	sed -i "/\[database\]/a connection\ =\ mysql\+pymysql:\/\/keystone:$KEYSTONE_DBPASS@controller\/keystone" /etc/keystone/keystone.conf
 	sed -i '/\^[token\]/a provider = fernet' /etc/keystone/keystone.conf
 	su -s /bin/sh -c "keystone-manage db_sync" keystone
+	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 	keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
 	keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
 	keystone-manage bootstrap --bootstrap-password $ADMIN_PASS \
@@ -233,6 +234,7 @@ else
 	  --bootstrap-internal-url http://controller:5000/v3/ \
 	  --bootstrap-public-url http://controller:5000/v3/ \
 	  --bootstrap-region-id RegionOne
+	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 	sed -i '/\#ServerName/a ServerName controller' /etc/httpd/conf/httpd.conf
 	ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/
 	systemctl enable --now httpd.service
