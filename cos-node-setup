@@ -314,15 +314,29 @@ else
 	echo "installing glance"
 	dnf install -y openstack-glance
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
-	echo "configuring glance files"
-	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf
-	authappend=$(printf "www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS") 
-	sed -i "/^\[keystone_authtoken\]/a $authappend" /etc/glance/glance-api.conf
+	echo "configuring glance files" 
+	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf 
+	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\
+auth_url = http://controller:5000\
+memcached_servers = controller:11211\
+auth_type = password\
+project_domain_name = Default\
+user_domain_name = Default\
+project_name = service\
+username = glance\
+password = GLANCE_PASS' /etc/glance/glance-api.conf
+	sed -i "s/GLANCE_PASS/$GLANCE_PASS" /etc/glance/glance-api.conf
 	sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 	sed -i '/^\#default_backend/a default_backend\ =\ fs' /etc/glance/glance-api.conf
 	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images\//@' /etc/glance/glance-api.conf
-	osloappend=$(printf "auth_url = http://controller:5000\nauth_type = password\nuser_domain_id = default\nusername = glance\nsystem_scope = all\npassword = $GLANCE_PASS\nendpoint_id = 340be3625e9b4239a6415d034e98aace\nregion_name = RegionOne")
-	sed -i "/^\[oslo_limit\]/a $osloappend" /etc/glance/glance-api.conf
+	sed -i '/^\[oslo_limit\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\
+memcached_servers = controller:11211\
+auth_type = password\
+project_domain_name = Default\
+user_domain_name = Default\
+project_name = service\nusername = glance\
+password = GLANCE_PASS'  /etc/glance/glance-api.conf
+	sed -i "s/GLANCE_PASS/$GLANCE_PASS"
 	echo "setting role permissions"
 	openstack role add --user glance --user-domain Default --system all reader
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
