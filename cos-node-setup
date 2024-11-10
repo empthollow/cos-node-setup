@@ -45,7 +45,7 @@ DASH_DBPASS=$dash_dbpass
 " >> openstack_passwords
 
 myuser_pass=$(openssl rand -hex 10)
-echo "# Password of user demo
+echo "# Password of user
 MYUSER_PASS=$myuser_pass
 
 " >> openstack_passwords
@@ -109,6 +109,57 @@ RABBIT_PASS=$rabbit_pass
 " >> openstack_passwords
 . openstack_passwords
 echo "Your passwords are in the file $(pwd)\/openstack_passwords"
+}
+
+srcopenrc()
+{
+#check for admin openrc
+if [ -e "admin-openrc" ]; then
+	echo "admin-openrc found"
+	osadmin=admin-openrc
+	sleep 2
+else
+	echo -n "specify path (y/n) >"
+	read specifypath
+	if [ "$specifypath" == "y" ]; then  
+		echo -n "enter path of admin-openrc or equivalent file > "
+		read osadmin
+	else
+	# Create myuser and openrc auth files
+		echo "creating myuser and openrc auth files in the current directory"
+		openstack user create myuser
+		[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
+		[ -e "admin-openrc" ] && $(mv admin-openrc admin-openrc.bak)
+		echo "export OS_PROJECT_DOMAIN_NAME=Default
+	export OS_USER_DOMAIN_NAME=Default
+	export OS_PROJECT_NAME=admin
+	export OS_USERNAME=admin
+	export OS_PASSWORD=$ADMIN_PASS
+	export OS_AUTH_URL=http://controller:5000/v3
+	export OS_IDENTITY_API_VERSION=3
+	export OS_IMAGE_API_VERSION=2" > admin-openrc
+		echo "**** $(pwd)/admin-openrc created ****"
+		[ -e "$myuser-openrc" ] && $(mv $myuser-openrc $myuser-openrc.bak)
+		echo "export OS_PROJECT_DOMAIN_NAME=Default
+	export OS_USER_DOMAIN_NAME=Default
+	export OS_PROJECT_NAME=myproject
+	export OS_USERNAME=$myuser
+	export OS_PASSWORD=$MYUSER_PASS
+	export OS_AUTH_URL=http://controller:5000/v3
+	export OS_IDENTITY_API_VERSION=3
+	export OS_IMAGE_API_VERSION=2" > $myuser-openrc
+		echo "**** $(pwd)/$myuser-openrc created ****"
+		sleep 4
+	
+	fi
+fi
+source $osadmin
+if [ "$?" -gt "0" ]; then 
+	echo "openrc auth error; exit or retry (r/x) > " 
+	read retry
+	[ "$retry" == "r" ] && srcopenrc || exit
+fi
+
 }
 
 base() {
@@ -249,31 +300,9 @@ else
 	export OS_PROJECT_DOMAIN_NAME=Default
 	export OS_AUTH_URL=http://controller:5000/v3
 	export OS_IDENTITY_API_VERSION=3
-
-	# Create myuser and openrc auth files
-	echo "creating myuser and openrc auth files in the current directory"
-	openstack user create $myuser
-	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
-	echo "export OS_PROJECT_DOMAIN_NAME=Default
-export OS_USER_DOMAIN_NAME=Default
-export OS_PROJECT_NAME=admin
-export OS_USERNAME=admin
-export OS_PASSWORD=$ADMIN_PASS
-export OS_AUTH_URL=http://controller:5000/v3
-export OS_IDENTITY_API_VERSION=3
-export OS_IMAGE_API_VERSION=2" > admin-openrc
-	echo "**** $(pwd)/admin-openrc created ****"
-	echo "export OS_PROJECT_DOMAIN_NAME=Default
-export OS_USER_DOMAIN_NAME=Default
-export OS_PROJECT_NAME=myproject
-export OS_USERNAME=$myuser
-export OS_PASSWORD=$MYUSER_PASS
-export OS_AUTH_URL=http://controller:5000/v3
-export OS_IDENTITY_API_VERSION=3
-export OS_IMAGE_API_VERSION=2" > $myuser-openrc
-	echo "**** $(pwd)/$myuser-openrc created ****"
-	sleep 4
-fi
+	#get admin-openrc
+	srcopenrc
+	fi
 }
 
 insglance() {
@@ -287,17 +316,9 @@ else
 	  IDENTIFIED BY '$GLANCE_DBPASS';"
 	mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
 	  IDENTIFIED BY '$GLANCE_DBPASS';"
-	#check for admin openrc
-	if [ -e "admin-openrc" ]; then
-		echo "admin-openrc found"
-		source admin-openrc 
-	else
-		echo -n "enter path of admin-openrc or equivalent  file > "
-		read osadmin
-		source $osadmin
-		[ "$?" -gt "0" ] && echo "openrc auth error, goodbye" && exit 
-	fi
-		
+	#get admin-openrc
+	srcopenrc
+
 	echo "creating glance user ..."
 	openstack user create --domain default --password $GLANCE_PASS glance
 	openstack project create service
@@ -315,7 +336,7 @@ else
 	dnf install -y openstack-glance
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
 	echo "configuring glance files" 
-	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf 
+	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf 
 	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\
 auth_url = http://controller:5000\
 memcached_servers = controller:11211\
@@ -336,6 +357,7 @@ user_domain_name = Default\
 project_name = service\nusername = glance\
 password = GLANCE_PASS'  /etc/glance/glance-api.conf
 	sed -i "s/GLANCE_PASS/$GLANCE_PASS/g" /etc/glance/glance-api.conf
+	sed -i "s/GLANCE_DBPASS/$GLANCE_DBPASS/g" /etc/glance/glance-api.conf
 	echo "setting role permissions"
 	openstack role add --user glance --user-domain Default --system all reader
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
@@ -348,13 +370,45 @@ password = GLANCE_PASS'  /etc/glance/glance-api.conf
 fi
 }
 
-controller() {
-insmariadb
-insrabbitmq
-insmemcached
-insetcd
-inskeystone
-insglance
+insplacement()
+{
+
+mysql -e "CREATE DATABASE placement;"
+mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' \
+  IDENTIFIED BY '$PLACEMENT_DBPASS';"
+[ "$?" -gt "0" ] && echo "placement install error, goodbye" && exit 
+mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' \
+  IDENTIFIED BY '$PLACEMENT_DBPASS';"
+[ "$?" -gt "0" ] && echo "placement install error, goodbye" && exit 
+srcopenrc
+openstack user create --domain default --password $PLACEMENT_PASS placement
+openstack role add --project service --user placement admin
+openstack service create --name placement --description "Placement API" placement
+openstack endpoint create --region RegionOne placement public http://controller:8778
+openstack endpoint create --region RegionOne placement internal http://controller:8778
+openstack endpoint create --region RegionOne placement admin http://controller:8778
+[ "$?" -gt "0" ] && echo "placement install error, goodbye" && exit 
+dnf install -y openstack-placement-api
+
+# writing placment config ...
+sed -i "/^\[placement_database\]/a connection\ =\ mysql\+pymysql:\/\/keystone:$PLACEMENT_DBPASS@controller\/placement" /etc/placement/placement.conf
+sed -i "/^\[api\]/a auth_strategy\ =\ keystone" /etc/placement/placement.conf
+sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \
+memcached_servers = controller:11211 \
+auth_type = password \
+project_domain_name = Default \
+user_domain_name = Default \
+project_name = service \
+username = placement \
+password = PLACEMENT_PASS" /etc/placement/placement.conf
+
+# populating placement database
+su -s /bin/sh -c "placement-manage db sync" placement
+[ "$?" -gt "0" ] && echo "placement install error, goodbye" && exit 
+
+# restarting server
+systemctl restart httpd
+[ "$?" -gt "0" ] && echo "placement install error, goodbye" && exit 
 
 }
 
@@ -375,6 +429,16 @@ mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'localhost' \
   IDENTIFIED BY '$NOVA_DBPASS';"
 mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
   IDENTIFIED BY '$NOVA_DBPASS';"
+}
+
+controller() {
+insmariadb
+insrabbitmq
+insmemcached
+insetcd
+inskeystone
+insglance
+
 }
 
 showips() {
