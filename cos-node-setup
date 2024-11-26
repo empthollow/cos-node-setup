@@ -131,23 +131,23 @@ else
 		[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 		[ -e "admin-openrc" ] && $(mv admin-openrc admin-openrc.bak)
 		echo "export OS_PROJECT_DOMAIN_NAME=Default
-	export OS_USER_DOMAIN_NAME=Default
-	export OS_PROJECT_NAME=admin
-	export OS_USERNAME=admin
-	export OS_PASSWORD=$ADMIN_PASS
-	export OS_AUTH_URL=http://controller:5000/v3
-	export OS_IDENTITY_API_VERSION=3
-	export OS_IMAGE_API_VERSION=2" > admin-openrc
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=$ADMIN_PASS
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+export OS_IMAGE_API_VERSION=2" > admin-openrc
 		echo "**** $(pwd)/admin-openrc created ****"
 		[ -e "$myuser-openrc" ] && $(mv $myuser-openrc $myuser-openrc.bak)
 		echo "export OS_PROJECT_DOMAIN_NAME=Default
-	export OS_USER_DOMAIN_NAME=Default
-	export OS_PROJECT_NAME=myproject
-	export OS_USERNAME=$myuser
-	export OS_PASSWORD=$MYUSER_PASS
-	export OS_AUTH_URL=http://controller:5000/v3
-	export OS_IDENTITY_API_VERSION=3
-	export OS_IMAGE_API_VERSION=2" > $myuser-openrc
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_NAME=myproject
+export OS_USERNAME=$myuser
+export OS_PASSWORD=$MYUSER_PASS
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+export OS_IMAGE_API_VERSION=2" > $myuser-openrc
 		echo "**** $(pwd)/$myuser-openrc created ****"
 		sleep 4
 	
@@ -176,7 +176,7 @@ dnf install -y python3-openstackclient openstack-selinux
 dnf install -y python3-openstackclient openstack-selinux
 }
 
-insmariadb() {
+mariadb() {
 # Install MariaDB
 if [ -n "$(systemctl list-units mariadb.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units mariadb.service --state active | grep running) ****"
@@ -186,13 +186,13 @@ else
 	dnf install -y mariadb mariadb-server python3-PyMySQL 
 	[ -e "/etc/my.cnf.d/openstack.cnf" ] && $(mv /etc/my.cnf.d/openstack.cnf /etc/my.cnf.d/openstack.bak)
 	echo "[mysqld]
-	bind-address = $controllerip
+bind-address = $controllerip
 
-	default-storage-engine = innodb
-	innodb_file_per_table = on
-	max_connections = 4096
-	collation-server = utf8_general_ci
-	character-set-server = utf8" > /etc/my.cnf.d/openstack.cnf
+default-storage-engine = innodb
+innodb_file_per_table = on
+max_connections = 4096
+collation-server = utf8_general_ci
+character-set-server = utf8" > /etc/my.cnf.d/openstack.cnf
 	systemctl enable --now mariadb.service
 	#mysql -e "DELETE FROM mysql.user WHERE User='';"
 	#mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
@@ -201,7 +201,7 @@ else
 fi
 }
 
-insrabbitmq() {
+rabbitmq() {
 # Message Queue - Rabbit MQ
 if [ -n "$(systemctl list-units rabbitmq-server.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units rabbitmq-server.service --state active | grep running) ****"
@@ -217,7 +217,7 @@ else
 fi
 }
 
-insmemcached() {
+memcached() {
 # Memcached
 if [ -n "$(systemctl list-units memcached.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units memcached.service --state active | grep running) ****"
@@ -225,13 +225,13 @@ else
 	echo "setting up memcached ..."
 
 	dnf install -y memcached python3-memcached
-	sed s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
+	sed -i s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
 	systemctl enable --now memcached.service
 	[ "$?" -gt "0" ] && echo "memcached error, goodbye" && exit 
 fi
 }
 
-insetcd() {
+etcd() {
 # ETCd
 if [ -n "$(systemctl list-units etcd.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units etcd.service --state active | grep running) ****"
@@ -258,7 +258,7 @@ ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
 fi
 }
 
-inskeystone() {
+keystone() {
 # Install Keystone
 if [ -f "/etc/httpd/conf.d/wsgi-keystone.conf" ] && [ -n "$(systemctl list-units httpd.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units httpd.service --state active | grep running) for keystone ****"
@@ -274,7 +274,7 @@ else
 	dnf install -y openstack-keystone httpd mod_wsgi
 	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
 
-	sed -i "/\[database\]/a connection\ =\ mysql\+pymysql:\/\/keystone:$KEYSTONE_DBPASS@controller\/keystone" /etc/keystone/keystone.conf
+	sed -i "/\[database\]/a connection = mysql+pymysql://keystone:$KEYSTONE_DBPASS@controller/keystone" /etc/keystone/keystone.conf
 	sed -i '/\^[token\]/a provider = fernet' /etc/keystone/keystone.conf
 	su -s /bin/sh -c "keystone-manage db_sync" keystone
 	[ "$?" -gt "0" ] && echo "keystone error, goodbye" && exit 
@@ -305,16 +305,16 @@ else
 	fi
 }
 
-insglance() {
+glance() {
 # Install Glance
 if [ -n "$(systemctl list-units openstack-glance-api.service --state active | grep -o running)" ]; then
 	echo "**** $(systemctl list-units openstack-glance-api.service --state active | grep running) ****"
 else
 	echo "setting up glance"
 	mysql -e "CREATE DATABASE glance;"
-	mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' \
+	mysql -e "GRANT ALL PRIVILEGES ON glance.* TO \'glance'@'localhost\' \
 	  IDENTIFIED BY '$GLANCE_DBPASS';"
-	mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
+	mysql -e "GRANT ALL PRIVILEGES ON glance.* TO \'glance'@'%\' \
 	  IDENTIFIED BY '$GLANCE_DBPASS';"
 	#get admin-openrc
 	srcopenrc
@@ -336,28 +336,28 @@ else
 	dnf install -y openstack-glance
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
 	echo "configuring glance files" 
-	sed -i '/^\[database\]/a connection = mysql+pymysql://glance:GLANCE_DBPASS@controller/glance' /etc/glance/glance-api.conf 
-	sed -i '/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\
-auth_url = http://controller:5000\
-memcached_servers = controller:11211\
-auth_type = password\
-project_domain_name = Default\
-user_domain_name = Default\
-project_name = service\
-username = glance\
-password = GLANCE_PASS' /etc/glance/glance-api.conf
+	sed -i "/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance" /etc/glance/glance-api.conf 
+	sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\n\
+auth_url = http://controller:5000\n\
+memcached_servers = controller:11211\n\
+auth_type = password\n\
+project_domain_name = Default\n\
+user_domain_name = Default\n\
+project_name = service\n\
+username = glance\n\
+password = $GLANCE_PASS" /etc/glance/glance-api.conf
 	sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
-	sed -i '/^\#default_backend/a default_backend\ =\ fs' /etc/glance/glance-api.conf
-	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images\//@' /etc/glance/glance-api.conf
-	sed -i '/^\[oslo_limit\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\
-memcached_servers = controller:11211\
-auth_type = password\
-project_domain_name = Default\
-user_domain_name = Default\
-project_name = service\nusername = glance\
-password = GLANCE_PASS'  /etc/glance/glance-api.conf
-	sed -i "s/GLANCE_PASS/$GLANCE_PASS/g" /etc/glance/glance-api.conf
-	sed -i "s/GLANCE_DBPASS/$GLANCE_DBPASS/g" /etc/glance/glance-api.conf
+	sed -i '/^\#default_backend/a default_backend = fs' /etc/glance/glance-api.conf
+	sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images/@' /etc/glance/glance-api.conf
+	sed -i "/^\[oslo_limit\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\n\
+memcached_servers = controller:11211\n\
+auth_type = password\n\
+project_domain_name = Default\n\
+user_domain_name = Default\n\
+project_name = service\nusername = glance\n\
+password = $GLANCE_PASS"  /etc/glance/glance-api.conf
+#	sed -i "s/GLANCE_PASS/$GLANCE_PASS/g" /etc/glance/glance-api.conf
+#	sed -i "s/GLANCE_DBPASS/$GLANCE_DBPASS/g" /etc/glance/glance-api.conf
 	echo "setting role permissions"
 	openstack role add --user glance --user-domain Default --system all reader
 	[ "$?" -gt "0" ] && echo "glance install error, goodbye" && exit 
@@ -370,7 +370,7 @@ password = GLANCE_PASS'  /etc/glance/glance-api.conf
 fi
 }
 
-insplacement()
+placement()
 {
 
 mysql -e "CREATE DATABASE placement;"
@@ -378,7 +378,7 @@ mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' \
   IDENTIFIED BY '$PLACEMENT_DBPASS';"
 [ "$?" -gt "0" ] && echo "placement install error, goodbye" && exit 
 mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' \
-  IDENTIFIED BY '$PLACEMENT_DBPASS';"
+IDENTIFIED BY '$PLACEMENT_DBPASS';"
 [ "$?" -gt "0" ] && echo "placement install error, goodbye" && exit 
 srcopenrc
 openstack user create --domain default --password $PLACEMENT_PASS placement
@@ -391,16 +391,16 @@ openstack endpoint create --region RegionOne placement admin http://controller:8
 dnf install -y openstack-placement-api
 
 # writing placment config ...
-sed -i "/^\[placement_database\]/a connection\ =\ mysql\+pymysql:\/\/keystone:$PLACEMENT_DBPASS@controller\/placement" /etc/placement/placement.conf
-sed -i "/^\[api\]/a auth_strategy\ =\ keystone" /etc/placement/placement.conf
-sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \
-memcached_servers = controller:11211 \
-auth_type = password \
-project_domain_name = Default \
-user_domain_name = Default \
-project_name = service \
-username = placement \
-password = PLACEMENT_PASS" /etc/placement/placement.conf
+sed -i "/^\[placement_database\]/a connection = mysql+pymysql://keystone:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
+sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
+sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \n\
+memcached_servers = controller:11211 \n\
+auth_type = password \n\
+project_domain_name = Default \n\
+user_domain_name = Default \n\
+project_name = service \n\
+username = placement \n
+password = $PLACEMENT_PASS" /etc/placement/placement.conf
 
 # populating placement database
 su -s /bin/sh -c "placement-manage db sync" placement
@@ -429,15 +429,231 @@ mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'localhost' \
   IDENTIFIED BY '$NOVA_DBPASS';"
 mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
   IDENTIFIED BY '$NOVA_DBPASS';"
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+# adding nova user
+srcopenrc
+openstack user create --domain default --password $NOVA_PASS nova
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+openstack role add --project service --user nova admin
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+openstack service create --name nova \
+  --description "OpenStack Compute" compute
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+# creating nova services
+openstack service create --name nova --description "OpenStack Compute" compute
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+# creating nova api endpoints 
+openstack endpoint create --region RegionOne compute public http://controller:8774/v2.1
+openstack endpoint create --region RegionOne compute internal http://controller:8774/v2.1
+openstack endpoint create --region RegionOne compute admin http://controller:8774/v2.1
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+dnf install -y openstack-nova-api openstack-nova-conductor  openstack-nova-novncproxy openstack-nova-scheduler
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672/\nmy_ip = $controllerip"  /etc/nova/nova.conf
+sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
+sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
+sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
+sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
+sed -i "/^\[keystone_authtoken\]/a # ...\n\
+www_authenticate_uri = http://controller:5000/\n\
+auth_url = http://controller:5000/\n\
+memcached_servers = controller:11211\n\
+auth_type = password\n\
+project_domain_name = Default\n\
+user_domain_name = Default\n\
+project_name = service\n\
+username = nova\n\
+password = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[service_user\]/a send_service_user_token = true\n\
+auth_url = https://controller/identity\n\
+auth_strategy = keystone\n\
+auth_type = password\n\
+project_domain_name = Default\n\
+project_name = service\n\
+user_domain_name = Default\n\
+username = nova\n\
+password = $NOVA_PASS" /etc/nova/nova.conf
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+sed -i "/^\[vnc\]/a enabled = true\nserver_listen = $controllerip\nserver_proxyclient_address = $controllerip"
+sed -i "/^\[glance\]/a api_servers = http://controller:9292"
+sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp"
+sed -i "/^\[placement\]/a region_name = RegionOne\n\
+project_domain_name = Default\n\
+project_name = service\n\
+auth_type = password\n\
+user_domain_name = Default\n\
+auth_url = http://controller:5000/v3\n\
+username = placement\n\
+password = $PLACEMENT_PASS" /etc/nova/nova.conf
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300"
+
+# populate nova-api db
+su -s /bin/sh -c "nova-manage api_db sync" nova
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+su -s /bin/sh -c "nova-manage cell_v2 map_cell0" nova
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" nova
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+su -s /bin/sh -c "nova-manage db sync" nova
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+su -s /bin/sh -c "nova-manage cell_v2 list_cells" nova
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+# enable services
+systemctl enable \
+openstack-nova-api.service \
+openstack-nova-scheduler.service \
+openstack-nova-conductor.service \
+openstack-nova-novncproxy.service
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+# start services
+systemctl start \
+openstack-nova-api.service \
+openstack-nova-scheduler.service \
+openstack-nova-conductor.service \
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
 }
 
+novanode()
+{
+# install nova
+dnf install -y openstack-nova-compute
+
+# write configs
+sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672/\nmy_ip = $controllerip"  /etc/nova/nova.conf
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\n\
+auth_url = http://controller:5000/\n\
+memcached_servers = controller:11211\n\
+auth_type = password\n\
+project_domain_name = Default\n\
+user_domain_name = Default\n\
+project_name = service\n\
+username = nova\n\
+password = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[service_user\]/a send_service_user_token = true\n\
+auth_url = https://controller/identity\n\
+auth_strategy = keystone\n\
+auth_type = password\n\
+project_domain_name = Default\n\
+project_name = service\n\
+user_domain_name = Default\n\
+username = nova\n\
+password = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[vnc\]/a enabled = true\nserver_listen = 0.0.0.0\nserver_proxyclient_address = $computeip\nnovncproxy_base_url = http://controller:6080/vnc_auto.html"
+sed -i "/^\[glance\]/a api_servers = http://controller:9292"
+sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp"
+sed -i "/^\[placement\]/a region_name = RegionOne\n\
+project_domain_name = Default\n\
+project_name = service\n\
+auth_type = password\n\
+user_domain_name = Default\n\
+auth_url = http://controller:5000/v3\n\
+username = placement\n\
+password = $PLACEMENT_PASS" /etc/nova/nova.conf
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+# finalize installation
+
+if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" ]; then
+	echo "this machine supports hardware acceleration\nnova configuration complete"
+else
+	sed -i "/^\[libvirt\]/a qemu"
+	echo "this machine does not support hardware acceleration\nusing quemu\nova configuration complete"
+fi
+
+# set services up
+systemctl enable libvirtd.service openstack-nova-compute.service
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+systemctl start libvirtd.service openstack-nova-compute.service
+[ "$?" -gt "0" ] && echo "nova install error, goodbye" && exit 
+
+echo "nova compute (node) set up; run the following to discover hosts manually on the controller node\nsu -s /bin/sh -c \"nova-manage cell_v2 discover_hosts --verbose\" nova"
+}
+
+cinderctl()
+{
+# database setup
+mysql -e "CREATE DATABASE cinder;"
+mysql -e "GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY '$CINDER_DBPASS';"
+mysql -e "GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'CINDER_DBPASS';"
+
+# openstack setup
+openstack user create --domain default --password-prompt cinder
+openstack role add --project service --user cinder admin
+openstack service create --name cinderv3 --description "OpenStack Block Storage" volumev3
+openstack endpoint create --region RegionOne volumev3 public http://controller:8776/v3/%\(project_id\)s
+openstack endpoint create --region RegionOne volumev3 internal http://controller:8776/v3/%\(project_id\)s
+openstack endpoint create --region RegionOne volumev3 admin http://controller:8776/v3/%\(project_id\)s
+
+# install and write config files
+dnf install -y openstack-cinder
+
+sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/cinder/cinder.conf
+sed -i "/^\[DEFAULT\]/a transport_url = rabbit://openstack:$RABBIT_PASS@controller\n\auth_strategy = keystone\n\my_ip = $controllerip" /etc/cinder/cinder.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\n\
+auth_url = http://controller:5000\n\
+memcached_servers = controller:11211\n\
+auth_type = password\n\
+project_domain_name = default\n\
+user_domain_name = default\n\
+project_name = service\n\
+username = cinder\n\
+password = $CINDER_PASS" /etc/cinder/cinder.conf
+sed -i "/^\[[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
+sed -i "/^\[cinder\]/a os_region_name = RegionOne" /etc/nova/nova.conf
+
+# populate database
+su -s /bin/sh -c "cinder-manage db sync" cinder
+
+# start services
+systemctl restart openstack-nova-api.service
+systemctl enable openstack-cinder-api.service openstack-cinder-scheduler.service
+systemctl start openstack-cinder-api.service openstack-cinder-scheduler.service
+}
+
+cindernode()
+{
+
+
+
+}
+
+cinderbackup()
+{
+dnf install -y openstack-cinder
+
+srcopenrd
+SWIFT_URL=$(openstack catalog show object-store | grep -o -E 'http[s]?://[^ ]+' | sed -n '1p')
+sed -i "/^\[DEFAULT\]/a backup_driver = cinder.backup.drivers.swift.SwiftBackupDriver\n\backup_swift_url = $SWIFT_URLl" /etc/nova/nova.conf
+
+# start services
+systemctl enable openstack-cinder-backup.service
+systemctl start openstack-cinder-backup.service
+}
+
+horizon()
+{
+
+}
+
+
 controller() {
-insmariadb
-insrabbitmq
-insmemcached
-insetcd
-inskeystone
-insglance
+mariadb
+rabbitmq
+memcached
+etcd
+keystone
+glance
+placement
+novactl
 
 }
 
