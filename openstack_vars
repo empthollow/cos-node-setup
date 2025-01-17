@@ -1,8 +1,28 @@
 release=bobcat
-node=controller
+node="controller flux bits"
 controllerip=172.22.3.21
 computeip=172.22.3.22
 blockstoreip=172.22.3.23
 objectstoreip=172.22.3.24
 myuser=user
+
+# cinder
+# cinder storage device
 cinderdev=/dev/sdb3
+# cinder controller ip
+cinderctrlip=$controllerip
+
+# set allowed hosts to access horizon
+hzallowedhosts=*
+# Time Zone Abbr: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+srvtz=CST
+
+# neutron
+provideriface=enp2s0
+overlayip=$controllerip
+
+#swift
+storagedev1=/dev/sdb
+storagedev2=/dev/sdc
+
+
