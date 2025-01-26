@@ -198,7 +198,7 @@ dnf upgrade -y
 dnf install -y centos-release-openstack-$release
 dnf install -y python3-openstackclient openstack-selinux
 dnf install -y python3-openstackclient openstack-selinux
-sed -in /basestat/s/1/0/ resume_status
+sed -i -n /basestat/s/1/0/ resume_status
 }
 
 mariadb_controller() {
@@ -220,7 +220,7 @@ systemctl enable --now mariadb.service
 ### mysql -e "DELETE FROM mysql.user WHERE User='';"
 ### mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
 ### mysql -e "  MariaDB> DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
-sed -in /mariadbstat/s/1/0/ resume_status
+sed -i -n /mariadbstat/s/1/0/ resume_status
 }
 
 rabbitmq_controller() {
@@ -232,7 +232,7 @@ dnf install -y rabbitmq-server
 systemctl enable --now rabbitmq-server
 rabbitmqctl add_user openstack $RABBIT_PASS
 rabbitmqctl set_permissions openstack ".*" ".*" ".*"
-sed -in /rabbitmqstat/s/1/0/ resume_status
+sed -i -n /rabbitmqstat/s/1/0/ resume_status
 }
 
 memcached_controller() {
@@ -243,7 +243,7 @@ echo "setting up memcached ..."
 dnf install -y memcached python3-memcached
 sed -i s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
 systemctl enable --now memcached.service
-sed -in /memchachedestat/s/1/0/ resume_status
+sed -i -n /memchachedestat/s/1/0/ resume_status
 }
 
 etcd_all() {
@@ -266,7 +266,7 @@ ETCD_INITIAL_CLUSTER=\"controller=http://$controllerip:2380\"
 ETCD_INITIAL_CLUSTER_TOKEN=\"etcd-cluster-01\"
 ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
 systemctl enable --now etcd
-sed -in /etcdestat/s/0/1/ resume_status
+sed -i -n /etcdestat/s/0/1/ resume_status
 }
 
 keystone_controller() {
@@ -302,7 +302,7 @@ export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_DOMAIN_NAME=Default
 export OS_AUTH_URL=http://controller:5000/v3
 export OS_IDENTITY_API_VERSION=3
-sed -in /keystonestat/s/0/1/ resume_status
+sed -i -n /keystonestat/s/0/1/ resume_status
 }
 
 glance_controller() {
@@ -348,7 +348,7 @@ echo "populating images"
 su -s /bin/sh -c "glance-manage db_sync" glance
 echo "starting daemon"
 systemctl enable --now openstack-glance-api.service
-sed -in /glancestat/s/1/0/ resume_status
+sed -i -n /glancestat/s/1/0/ resume_status
 }
 
 placement_controller()
@@ -378,7 +378,7 @@ su -s /bin/sh -c "placement-manage db sync" placement
 
 # restarting server
 systemctl restart httpd
-sed -in /placementstat/s/1/0/ resume_status
+sed -i -n /placementstat/s/1/0/ resume_status
 }
 
 nova_controller() {
@@ -451,7 +451,7 @@ systemctl start \
 openstack-nova-api.service \
 openstack-nova-scheduler.service \
 openstack-nova-conductor.service \
-sed -in /novactlstat/s/1/0/ resume_status
+sed -i -n /novactlstat/s/1/0/ resume_status
 }
 
 nova_node()
@@ -484,7 +484,7 @@ fi
 # set services up
 systemctl enable libvirtd.service openstack-nova-compute.service
 systemctl start libvirtd.service openstack-nova-compute.service
-sed -in /novanodestat/s/1/0/ resume_status
+sed -i -n /novanodestat/s/1/0/ resume_status
 
 echo "nova compute (node) set up; run the following to discover hosts manually on the controller node\nsu -s /bin/sh -c \"nova-manage cell_v2 discover_hosts --verbose\" nova"
 echo "press enter to continue"
@@ -527,7 +527,7 @@ su -s /bin/sh -c "cinder-manage db sync" cinder
 systemctl restart openstack-nova-api.service
 systemctl enable openstack-cinder-api.service openstack-cinder-scheduler.service
 systemctl start openstack-cinder-api.service openstack-cinder-scheduler.service
-sed -in /cinderctlstat/s/1/0/ resume_status
+sed -i -n /cinderctlstat/s/1/0/ resume_status
 }
 
 cinder_node()
@@ -554,7 +554,7 @@ sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:50
 systemctl enable openstack-cinder-volume.service target.service
 systemctl start openstack-cinder-volume.service target.service
 
-sed -in /cinderctlstat/s/1/0/ resume_status
+sed -i -n /cinderctlstat/s/1/0/ resume_status
 }
 
 cinderbackup_node()
@@ -571,7 +571,7 @@ sed -i "/^\[DEFAULT\]/a backup_driver = cinder.backup.drivers.swift.SwiftBackupD
 systemctl enable openstack-cinder-backup.service
 systemctl start openstack-cinder-backup.service
 
-sed -in /cinderbackupstat/s/1/0/ resume_status
+sed -i -n /cinderbackupstat/s/1/0/ resume_status
 }
 
 horizon()
@@ -586,18 +586,18 @@ dnf install -y openstack-dashboard
 
 # local_settings file
 linemcd=$(awk '/^#CACHES/{ print NR }')
-sed -in ""$linemcd"c\#$'\t'\ \'LOCATION\':\ \'controller:11211\'," /etc/openstack-dashboard/local_settings 
+sed -i -n ""$linemcd"c\#$'\t'\ \'LOCATION\':\ \'controller:11211\'," /etc/openstack-dashboard/local_settings 
 sed -i "$linemcd,$(awk 'BEGIN { print $linemcd+5 }')s/^#//" /etc/openstack-dashboard/local_settings
-sed -in "$(awk '/^OPENSTACK_HOST/{ print NR }' /etc/openstack-dashboard/local_settings)s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
-sed -in "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
-sed -in "$(awk '/^ALLOWED_HOSTS/{ print NR }' /etc/openstack-dashboard/local_settings)s/\'horizon.example.com\',/$(IFS="," hzallowhosts="localhost,forty.com" for x in $hzallowhosts; do echo -n "'$x', "; done)/" /etc/openstack-dashboard/local_settings
-sed -in "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True\nOPENSTACK_API_VERSIONS = {\n\t\"identity\": 3,\n\t\"image\": 2,\n\t\"volume\": 3,\n}\n\nOPENSTACK_KEYSTONE_DEFAULT_DOMAIN = \"Default\"\nOPENSTACK_KEYSTONE_DEFAULT_ROLE = \"user\"" /etc/openstack-dashboard/local_settings
-sed -in "$(awk '/^TIME_ZONE/{ print NR }' /etc/openstack-dashboard/local_settings)s/"UTC"/$svrtz/" /etc/openstack-dashboard/local_settings
+sed -i -n "$(awk '/^OPENSTACK_HOST/{ print NR }' /etc/openstack-dashboard/local_settings)s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
+sed -i -n "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
+sed -i -n "$(awk '/^ALLOWED_HOSTS/{ print NR }' /etc/openstack-dashboard/local_settings)s/\'horizon.example.com\',/$(IFS="," hzallowhosts="localhost,forty.com" for x in $hzallowhosts; do echo -n "'$x', "; done)/" /etc/openstack-dashboard/local_settings
+sed -i -n "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True\nOPENSTACK_API_VERSIONS = {\n\t\"identity\": 3,\n\t\"image\": 2,\n\t\"volume\": 3,\n}\n\nOPENSTACK_KEYSTONE_DEFAULT_DOMAIN = \"Default\"\nOPENSTACK_KEYSTONE_DEFAULT_ROLE = \"user\"" /etc/openstack-dashboard/local_settings
+sed -i -n "$(awk '/^TIME_ZONE/{ print NR }' /etc/openstack-dashboard/local_settings)s/"UTC"/$svrtz/" /etc/openstack-dashboard/local_settings
 
 # openstack-dashboard.conf file
 sed -i "/WSGIProcessGroup\ dashboard/aWSGIApplicationGroup\ %{GLOBAL}" /etc/httpd/conf.d/openstack-dashboard.conf
 
-sed -in /cinderbackupstat/s/1/0/ resume_status
+sed -i -n /cinderbackupstat/s/1/0/ resume_status
 }
 
 neutron_controller()
@@ -645,7 +645,7 @@ sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch" /etc/neutron/l3_agent.in
 # Configure the DHCP agent¶
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch\ndhcp_driver = neutron.agent.linux.dhcp.Dnsmasq\nenable_isolated_metadata = true" /etc/neutron/dhcp_agent.ini
 
-sed -in /neutronctrlstat/s/1/0/ resume_status
+sed -i -n /neutronctrlstat/s/1/0/ resume_status
 }
 
 neutron_compute_node()
@@ -678,7 +678,7 @@ systemctl restart openstack-nova-compute.service
 systemctl enable neutron-openvswitch-agent.service
 systemctl start neutron-openvswitch-agent.service
 
-sed -in /neutroncomputestat/s/1/0/ resume_status
+sed -i -n /neutroncomputestat/s/1/0/ resume_status
 }
 
 neutron_block_node()
@@ -698,7 +698,7 @@ mysql -e "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY '$NEU
 srcopenrc
 openstack user create --domain default --password $NEUTRON_PASS neutron
 
-sed -in /neutronblockstat/s/1/0/ resume_status
+sed -i -n /neutronblockstat/s/1/0/ resume_status
 }
 
 swift_controller()
@@ -731,7 +731,7 @@ sed -i -n -e "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware
 sed -i -n -e '/^\[filter:cache\]/,/^\[/{/egg:swift#memcache/a memcache_servers = controller:11211}' /etc/swift/proxy-server.conf
 
 # set resume status
-sed -in /swiftctrlstat/s/1/0/ resume_status
+sed -i -n /swiftctrlstat/s/1/0/ resume_status
 }
 
 swift_node()
@@ -808,7 +808,7 @@ firewall-cmd --permanent --add-port=6200/tcp
 firewall-cmd --permanent --add-port=6201/tcp
 firewall-cmd --permanent --add-port=6202/tcp
 
-sed -in /swiftnodestat/s/1/0/ resume_status
+sed -i -n /swiftnodestat/s/1/0/ resume_status
 }
 
 swift_init_rings_node()
@@ -959,12 +959,12 @@ flush_resume()
 {
 # reset resume file to zeros
 sed -i s/0/1/g resume_status
-sed -in /resume/s/1/0/ resume_status
+sed -i -n /resume/s/1/0/ resume_status
 echo "Resume states reset for full installation" && sleep 1
 }
 
 err() {
-[ "$?" -gt "0" ] && sed -in /resume/s/0/1/ resume_status && echo "$stage installation or execution error on $LINENO, goodbye" && exit 1 
+[ "$?" -gt "0" ] && sed -i -n /resume/s/0/1/ resume_status && echo "$stage installation or execution error on $LINENO, goodbye" && exit 1 
 }
 
 resume_state()
