@@ -1,8 +1,8 @@
 # resume tracking for failed installs
-# set resume to 0 to resume previous install
+# set resume to 1 to resume previous install
 resume=0
-# set status variable to 1 for install, 2 for skip
-# to reset all to zero run 'cos-node-setup flush_resume'
+# set status variable to 1 for install, 0 for skip
+# to reset all to run 'cos-node-setup flush_resume'
 basestat=1
 mariadbstat=1
 rabbitmqstat=1

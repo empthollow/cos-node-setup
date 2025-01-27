@@ -16,9 +16,9 @@ trap 'handle_error $LINENO' ERR
 dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cd $dir 
 ### pwd
-[ -e "openstack_passwords" ] && . openstack_passwords || $(echo "openstack_passwords does not exist" && exit 1)
-[ -e "openstack_vars" ] && . openstack_vars || $(echo "openstack_vars does not exist" && exit 1)
-[ -e "resume_status" ] && . resume_status || $(echo "resume_status does not exist" && exit 1)
+[ -e "openstack_passwords" ] && . openstack_passwords || { echo "openstack_passwords does not exist"; }
+[ -e "openstack_vars" ] && . openstack_vars || { echo "openstack_vars does not exist" && exit 1; }
+[ -e "resume_status" ] && . resume_status || { echo "resume_status does not exist" && exit 1; }
 ### echo "$resume"
 ### exit
 
@@ -115,22 +115,28 @@ NOVA_PASS=$nova_pass
 " >> openstack_passwords
 
 placement_pass=$(openssl rand -hex 10)
-echo "# Password of the Placement service user placement
+echo "# password of the placement service user placement
 PLACEMENT_PASS=$placement_pass
+
+" >> openstack_passwords
+
+placement_dbpass=$(openssl rand -hex 10)
+echo "# password of the placement service user placement
+PLACEMENT_DBPASS=$placement_dbpass
 
 " >> openstack_passwords
 
 rabbit_pass=$(openssl rand -hex 10)
 echo "# Password of RabbitMQ user openstack
-RABBIT_PASS=$rabbit_pass" 
+RABBIT_PASS=$rabbit_pass
 
->> openstack_passwords
+" >> openstack_passwords
 
 swift_pass=$(openssl rand -hex 10)
 echo "# Password of RabbitMQ user openstack
-SWIFT_PASS=$rabbit_pass" 
+SWIFT_PASS=$rabbit_pass
 
->> openstack_passwords
+" >> openstack_passwords
 
 . openstack_passwords
 
@@ -855,14 +861,18 @@ $objectstoreip	objectstore"
 }
 
 writehosts() {
-echo -n "Enter IP for controller node I : "
+echo -n "Enter IP for controller node 1 : "
 read controllerip
 echo -n "Enter IP for compute node 1 : "
 read computeip
 echo -n "Enter IP for block storage node 1 : "
-read blockstorageip
+read blockstoreip
 echo -n "Enter IP for object storage node 1 : "
 read objectstoreip
+echo "===================================================="
+echo "           New Hosts Config File       "
+echo "===================================================="
+echo ""
 showips
 }
 
@@ -883,16 +893,23 @@ echo -n "Openstack Node (controller compute block object) : "
 read node
 echo -n "Set node IPs and optionally write to hosts file? [y/n/x]: "
 read hostsfile
-[ "$hostsfile" == "y" ] && writehosts || [ "$hostsfile" == "x" ] && exit
+[ "$hostsfile" == "y" ] && writehosts || { [ "$hostsfile" == "x" ] && exit ; }
 
 }
 
 viewvars() {
 # show current variables
-echo "*****current IP assignments*****"
+echo ""
+echo "===================================================="
+echo "               Current IP Assignments             "
+echo "===================================================="
+echo ""
 ip addr show | grep -E "^\s+inet\s" | sed 1d
 echo ""
-echo "*****current variable assignments*****"
+echo "===================================================="
+echo "             Current Variable Assignments           "
+echo "===================================================="
+echo ""
 #echo "openstack release to install=$release"
 #echo "node to install=$node"
 #echo "myuser=$myuser"
@@ -904,13 +921,16 @@ echo "*****current variable assignments*****"
 #echo "cinder controller IP=$cinderctrlip"
 #echo "horizon allowed hosts=$hzallowedhosts"
 #echo "Time Zone Code=$srvtz"
-awk 'BEGIN {FS="\="; printf "%20s%20s\n", "--Variable--", "--Value--"} /^[a-z]/{printf "%18s%20s\n", $1, $2}' openstack_vars 2>/dev/null | grep -v ^#
+awk 'BEGIN {FS="\="; printf "%20s%20s\n", "--Variable--", "--Value--"} /^[a-z]/{printf "%20s%25s\n", $1, $2}' openstack_vars 2>/dev/null | grep -v ^#
 echo "*****Time Zone Abbr: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones*****"
 echo -n "continue with current values? [y/n/x]: "
 read install
-[ "$?" -gt "0" ] && exit 
-[ "$install" == "n" ] && setvars 
-[ "$install" == "n" ] && setvars || [ "$install" == "x" ] && exit
+case $install in 
+		y	)	echo "Continuing installation..." && sleep 1 ;;
+		n	)	setvars ;;
+		x	)	exit ;;
+		*	)	echo "Invalid response" && viewvars	;;
+	esac
 }
 
 viewpasswords() {
@@ -928,6 +948,7 @@ echo "NEUTRON_PASS = $NEUTRON_PASS"
 echo "NOVA_DBPASS = $NOVA_DBPASS"
 echo "NOVA_PASS = $NOVA_PASS"
 echo "PLACEMENT_PASS = $PLACEMENT_PASS"
+echo "PLACEMENT_DBPASS=$PLACEMENT_DBPASS"
 echo "RABBIT_PASS = $RABBIT_PASS"
 echo "SWIFT_PASS = $SWIFT_PASS"
 genask
@@ -963,10 +984,6 @@ sed -i -n /resume/s/1/0/ resume_status
 echo "Resume states reset for full installation" && sleep 1
 }
 
-err() {
-[ "$?" -gt "0" ] && sed -i -n /resume/s/0/1/ resume_status && echo "$stage installation or execution error on $LINENO, goodbye" && exit 1 
-}
-
 resume_state()
 {
 if [ "$resume" == "1" ]; then
@@ -995,15 +1012,21 @@ if [ "$1" ==  "" ]; then
 	fi
 	resume_state
 	viewvars
-	echo "*** current /etc/hosts file ***"
+	echo "===================================================="
+	echo "            Current Hosts Config File               "
+	echo "===================================================="
+	echo ""
 	cat /etc/hosts
+	echo ""
 	echo -n "update hosts file? [y/n]> "
 	read update
-	[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "/etc/hosts updated" || echo "/etc/hosts NOT updated"
+	[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "*****/etc/hosts updated*****" || { echo "*****/etc/hosts NOT updated*****" ; }
 	checkpasswords
 	for x in $node 
 	do
+		echo "$x"
 		$x
+		echo "$LINENO"
 	done
 else
 	#args="$#"
