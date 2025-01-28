@@ -980,7 +980,7 @@ flush_resume()
 {
 # reset resume file to zeros
 sed -i s/0/1/g resume_status
-sed -i -n /resume/s/1/0/ resume_status
+sed -i /resume/s/1/0/ resume_status
 echo "Resume states reset for full installation" && sleep 1
 }
 
@@ -1021,12 +1021,10 @@ if [ "$1" ==  "" ]; then
 	echo -n "update hosts file? [y/n]> "
 	read update
 	[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "*****/etc/hosts updated*****" || { echo "*****/etc/hosts NOT updated*****" ; }
-	checkpasswords
+	#checkpasswords
 	for x in $node 
 	do
-		echo "$x"
-		$x
-		echo "$LINENO"
+		${x}_archetype
 	done
 else
 	#args="$#"
