@@ -3,7 +3,7 @@
 # Error handling function
 handle_error() {
 echo "=========================================================="
-echo "$stage installation or execution error on $LINENO, goodbye"
+echo "$stage installation or execution error on ${BASH_LINENO[0]}, goodbye"
 echo "=========================================================="
 sed -i /resume/s/0/1/ resume_status
 exit 1
@@ -143,7 +143,9 @@ SWIFT_PASS=$rabbit_pass
 
 . openstack_passwords
 
-echo "Your passwords are in the file $(pwd)\/openstack_passwords"
+echo "========================================================================================"
+echo "Your passwords are in the file $(pwd)/openstack_passwords"
+echo "========================================================================================"
 }
 
 srcopenrc()
@@ -154,16 +156,15 @@ if [ -e "admin-openrc" ]; then
 	osadmin=admin-openrc
 	sleep 2
 else
-	echo -n "specify path (if n files will be created) [y/n] >"
+	echo -n "specify path (if no, files will be created) [y/n] >"
 	read specifypath
 	if [ "$specifypath" == "y" ]; then  
 		echo -n "enter path of admin-openrc or equivalent file > "
 		read osadmin
 	else
 	# Create myuser and openrc auth files
-		echo "creating myuser and openrc auth files in the current directory"
-		openstack user create myuser
-		[ -e "admin-openrc" ] && $(mv admin-openrc admin-openrc.bak)
+		echo "creating $myuser and openrc auth files in the current directory"
+		openstack user create $myuser
 		echo "export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=admin
@@ -172,7 +173,8 @@ export OS_PASSWORD=$ADMIN_PASS
 export OS_AUTH_URL=http://controller:5000/v3
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > admin-openrc
-		echo "**** $(pwd)/admin-openrc created ****"
+		echo "==========================================================="
+		echo "$(pwd)/admin-openrc created "
 		echo "export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=myproject
@@ -181,7 +183,8 @@ export OS_PASSWORD=$MYUSER_PASS
 export OS_AUTH_URL=http://controller:5000/v3
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > $myuser-openrc
-		echo "**** $(pwd)/$myuser-openrc created ****"
+		echo "$(pwd)/$myuser-openrc created "
+		echo "==========================================================="
 		sleep 4
 	
 	fi
@@ -337,7 +340,9 @@ echo "creating api endpoints"
 openstack endpoint create --region RegionOne image public http://controller:9292
 openstack endpoint create --region RegionOne image internal http://controller:9292
 openstack endpoint create --region RegionOne image admin http://controller:9292
-echo "**** not setting quota limits - see openstack documentation ****"
+echo "================================================================"
+echo "     not setting quota limits - see openstack documentation "
+echo "================================================================"
 
 # Install & Configure components
 echo "installing glance"
@@ -850,6 +855,7 @@ controller_archetype()
 [ "$resume" == 1 ] && [ "$cinderctlstat" == "0" ] && echo "cinderctl complete" || cinderctl_controller
 [ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "horizon complete" || horizon_controller
 
+sed -i /resume/s/1/0/ resume_status
 }
 
 showips() {
@@ -957,14 +963,14 @@ echo "PLACEMENT_PASS = $PLACEMENT_PASS"
 echo "PLACEMENT_DBPASS=$PLACEMENT_DBPASS"
 echo "RABBIT_PASS = $RABBIT_PASS"
 echo "SWIFT_PASS = $SWIFT_PASS"
-genask
-checkpasswords
 }
 
 genask() {
 echo -n "generate new passwords file? [y/n]> "
 read gen
-[ "$gen" == "y" ] && generatepasswords
+if [ "$gen" == "y" ]; then 
+	generatepasswords
+fi
 }
 
 checkpasswords() {
@@ -977,8 +983,11 @@ else
 	
 fi
 echo -n "view passwords? [y/n]> "
-	read viewpw
-	[ "$viewpw" == "y" ] && viewpasswords
+read viewpw
+if [ "$viewpw" == "y" ] ; then
+	viewpasswords
+	genask
+fi
 
 }
 
@@ -1027,7 +1036,7 @@ if [ "$1" ==  "" ]; then
 	echo -n "update hosts file? [y/n]> "
 	read update
 	[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "*****/etc/hosts updated*****" || { echo "*****/etc/hosts NOT updated*****" ; }
-	#checkpasswords
+	checkpasswords
 	for x in $node 
 	do
 		${x}_archetype

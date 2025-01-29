@@ -3,14 +3,14 @@
 resume=0
 # set status variable to 1 for install, 2 for skip
 # to reset all to zero run 'cos-node-setup flush_resume'
-basestat=1
-mariadbstat=1
-rabbitmqstat=1
-memcachedstat=1
-etcdstat=1
-keystonestat=1
-glancestat=1
-placementstat=1
+basestat=0
+mariadbstat=0
+rabbitmqstat=0
+memcachedstat=0
+etcdstat=0
+keystonestat=0
+glancestat=0
+placementstat=0
 novactlstat=1
 novanodestat=1
 cinderctlstat=1
