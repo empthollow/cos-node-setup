@@ -330,9 +330,13 @@ mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
 
 echo "creating glance user ..."
 #get admin-openrc
+echo "openrc"
 srcopenrc
+echo "os create user"
 openstack user create --domain default --password $GLANCE_PASS glance
+echo "os create project service"
 openstack project create service
+echo "os role add"
 openstack role add --project service --user glance admin
 echo "creating service identity ..."
 openstack service create --name glance --description "OpenStack Image" image
@@ -368,7 +372,9 @@ sed -i /glancestat/s/1/0/ resume_status
 placement_controller()
 {
 stage=placement
+echo "======================================="
 echo "setting up placment for controller node"
+echo "======================================="
 
 mysql -e "CREATE DATABASE placement;"
 mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' IDENTIFIED BY '$PLACEMENT_DBPASS';"
@@ -399,7 +405,6 @@ nova_controller() {
 # Install Nova - Controller Node
 stage="nova controller"
 echo "setting up nova for controller node"
-
 mysql -e "CREATE DATABASE nova_api;"
 mysql -e "CREATE DATABASE nova;"
 mysql -e "CREATE DATABASE nova_cell0;"
@@ -407,7 +412,7 @@ mysql -e "GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'localhost' \
   IDENTIFIED BY '$NOVA_DBPASS';"
 mysql -e "GRANT ALL PRIVILEGES ON nova_api.* TO 'nova'@'%' \
   IDENTIFIED BY '$NOVA_DBPASS';"
-mysql -e "RANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' \
+mysql -e "GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'localhost' \
   IDENTIFIED BY '$NOVA_DBPASS';"
 mysql -e "GRANT ALL PRIVILEGES ON nova.* TO 'nova'@'%' \
   IDENTIFIED BY '$NOVA_DBPASS';"
@@ -464,7 +469,7 @@ openstack-nova-novncproxy.service
 systemctl start \
 openstack-nova-api.service \
 openstack-nova-scheduler.service \
-openstack-nova-conductor.service \
+openstack-nova-conductor.service 
 sed -i /novactlstat/s/1/0/ resume_status
 }
 
@@ -843,6 +848,8 @@ sed -i /heatctrlstat/s/1/0/ resume_status
 
 controller_archetype()
 { 
+
+sed -i /resume/s/0/1/ resume_status
 [ "$resume" == 1 ] && [ "$basestat" == "0" ] && echo "mariadb complete" || base_all 
 [ "$resume" == 1 ] && [ "$etcdstat" == "0" ] && echo "etcd complete" || etcd_all
 [ "$resume" == 1 ] && [ "$mariadbstat" == "0" ] && echo "mariadb complete" || mariadb_controller
@@ -852,8 +859,8 @@ controller_archetype()
 [ "$resume" == 1 ] && [ "$glancestat" == "0" ] && echo "glance complete" || glance_controller
 [ "$resume" == 1 ] && [ "$placementstat" == "0" ] && echo "placement complete" || placement_controller
 [ "$resume" == 1 ] && [ "$novactlstat" == "0" ] && echo "novactl complete" || nova_controller
-[ "$resume" == 1 ] && [ "$cinderctlstat" == "0" ] && echo "cinderctl complete" || cinderctl_controller
-[ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "horizon complete" || horizon_controller
+[ "$resume" == 1 ] && [ "$cinderctlstat" == "0" ] && echo "cinderctl complete" || cinder_controller
+[ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "horizon complete" || horizon
 
 sed -i /resume/s/1/0/ resume_status
 }
