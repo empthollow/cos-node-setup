@@ -1,11 +1,16 @@
 #!/bin/bash
 
-# Error handling function
+# Error handling
+# Exit script on first error
+set -o errexit  
+# Catch errors in pipelines
+set -o pipefail 
+
 handle_error() {
 echo "=========================================================="
 echo "$stage installation or execution error on ${BASH_LINENO[0]}, goodbye"
 echo "=========================================================="
-sed -i /resume/s/0/1/ resume_status
+#sed -i /resume/s/0/1/ resume_status
 exit 1
 }
 
@@ -163,9 +168,7 @@ else
 		read osadmin
 	else
 	# Create myuser and openrc auth files
-		echo "creating $myuser and openrc auth files in the current directory"
-		openstack user create $myuser
-		echo "export OS_PROJECT_DOMAIN_NAME=Default
+				echo "export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=admin
 export OS_USERNAME=admin
@@ -175,6 +178,10 @@ export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > admin-openrc
 		echo "==========================================================="
 		echo "$(pwd)/admin-openrc created "
+		echo "creating $myuser and openrc auth files in the current directory"
+		osadmin=admin-openrc
+		source $osadmin
+		openstack user create --domain default --password $MYUSER_PASS $myuser
 		echo "export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=myproject
@@ -201,7 +208,9 @@ fi
 base_all() {
 # install base node packages
 stage=base
-echo "setting up base packages ..."
+echo "==============================================="
+echo "         setting up base packages  "
+echo "==============================================="
 
 dnf upgrade -y
 dnf install -y dnf-plugins-core
@@ -216,7 +225,9 @@ sed -i /basestat/s/1/0/ resume_status
 mariadb_controller() {
 # Install MariaDB
 stage=mariadb
-echo "setting up mariadb ..."
+echo "==============================================="
+echo "             setting up mariadb      "
+echo "==============================================="
 
 dnf install -y mariadb mariadb-server python3-PyMySQL 
 [ -e "/etc/my.cnf.d/openstack.cnf" ] && $(mv /etc/my.cnf.d/openstack.cnf /etc/my.cnf.d/openstack.bak)
@@ -238,7 +249,9 @@ sed -i /mariadbstat/s/1/0/ resume_status
 rabbitmq_controller() {
 # Message Queue - Rabbit MQ
 stage=rabbitmq
-echo "setting up rabbit mq ..."
+echo "==============================================="
+echo "           setting up rabbit mq "
+echo "==============================================="
 
 dnf install -y rabbitmq-server
 systemctl enable --now rabbitmq-server
@@ -250,7 +263,10 @@ sed -i /rabbitmqstat/s/1/0/ resume_status
 memcached_controller() {
 # Memcached
 stage=memcached
-echo "setting up memcached ..."
+
+echo "==============================================="
+echo "            setting up memcached "
+echo "==============================================="
 
 dnf install -y memcached python3-memcached
 sed -i s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
@@ -261,7 +277,9 @@ sed -i /memcachedstat/s/1/0/ resume_status
 etcd_all() {
 # ETCd
 stage=etcd
-echo "setting up ETCd ..."
+echo "==============================================="
+echo "              setting up ETCd "
+echo "==============================================="
 
 dnf install -y etcd
 sed -i 's/^[^#]/#/' /etc/etcd/etcd.conf
@@ -284,7 +302,9 @@ sed -i /etcdstat/s/1/0/ resume_status
 keystone_controller() {
 # Install Keystone
 stage=keystone
-echo "setting up Keystone ..."
+echo "==============================================="
+echo "            setting up Keystone "
+echo "==============================================="
 
 mysql -e "CREATE DATABASE keystone;"
 mysql -e "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY '$KEYSTONE_DBPASS';"
@@ -320,7 +340,9 @@ sed -i /keystonestat/s/1/0/ resume_status
 glance_controller() {
 # Install Glance
 stage=glance
-echo "setting up glance"
+echo "==============================================="
+echo "             setting up glance"
+echo "==============================================="
 
 mysql -e "CREATE DATABASE glance;"
 mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' \
@@ -372,9 +394,9 @@ sed -i /glancestat/s/1/0/ resume_status
 placement_controller()
 {
 stage=placement
-echo "======================================="
-echo "setting up placment for controller node"
-echo "======================================="
+echo "==============================================="
+echo "   setting up placment for controller node"
+echo "==============================================="
 
 mysql -e "CREATE DATABASE placement;"
 mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' IDENTIFIED BY '$PLACEMENT_DBPASS';"
@@ -404,7 +426,10 @@ sed -i /placementstat/s/1/0/ resume_status
 nova_controller() {
 # Install Nova - Controller Node
 stage="nova controller"
-echo "setting up nova for controller node"
+echo "==============================================="
+echo "     setting up nova for controller node"
+echo "==============================================="
+
 mysql -e "CREATE DATABASE nova_api;"
 mysql -e "CREATE DATABASE nova;"
 mysql -e "CREATE DATABASE nova_cell0;"
@@ -443,13 +468,13 @@ sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@cont
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
-sed -i "/^\[keystone_authtoken\]/a # ...\nwww_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
-sed -i "/^\[vnc\]/a enabled = true\nserver_listen = $controllerip\nserver_proxyclient_address = $controllerip"
-sed -i "/^\[glance\]/a api_servers = http://controller:9292"
-sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp"
+sed -i "/^\[vnc\]/a enabled = true\nserver_listen = $controllerip\nserver_proxyclient_address = $controllerip" /etc/nova/nova.conf
+sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
+sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = http://controller:5000/v3\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
-sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300"
+sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
 
 # populate nova-api db
 su -s /bin/sh -c "nova-manage api_db sync" nova
@@ -477,7 +502,9 @@ nova_node()
 {
 # install nova
 stage=novanode
-echo "installing nove for compute node"
+echo "==============================================="
+echo "      installing nove for compute node"
+echo "==============================================="
 
 dnf install -y openstack-nova-compute
 
@@ -514,7 +541,9 @@ cinder_controller()
 {
 # install cinder control server
 stage=cinderctl
-echo "installing cinder for contoller"
+echo "==============================================="
+echo "      installing cinder for contoller"
+echo "==============================================="
 
 # database setup
 mysql -e "CREATE DATABASE cinder;"
@@ -553,7 +582,9 @@ cinder_node()
 {
 # install cinder node
 stage=cindernode
-echo "installing cinder for block storage node"
+echo "==============================================="
+echo "   installing cinder for block storage node"
+echo "==============================================="
 
 pvcreate /dev/$cinderdev
 vgcreate cinder-volumes /dev/$cinderdev
@@ -579,7 +610,9 @@ sed -i /cindernodestat/s/1/0/ resume_status
 cinderbackup_node()
 {
 stage="cinder for backup node ***swift required***"
-echo "setting up cinder for backup node"
+echo "==============================================="
+echo "      setting up cinder for backup node"
+echo "==============================================="
 
 dnf install -y openstack-cinder
 srcopenrc
@@ -597,21 +630,34 @@ horizon()
 {
 # install horizon dashboard
 stage="horizon dashboard"
-echo "installing horizon dashboard"
+echo "==============================================="
+echo "       installing horizon dashboard"
+echo "==============================================="
 
 dnf install -y openstack-dashboard
 
 # config files
 
 # local_settings file
-linemcd=$(awk '/^#CACHES/{ print NR }')
+linemcd=$(awk '/^#CACHES/{ print NR }' /etc/openstack-dashboard/local_settings)
+echo 1
 sed -i ""$linemcd"c\#$'\t'\ \'LOCATION\':\ \'controller:11211\'," /etc/openstack-dashboard/local_settings 
+echo 2
 sed -i "$linemcd,$(awk 'BEGIN { print $linemcd+5 }')s/^#//" /etc/openstack-dashboard/local_settings
+echo 3
 sed -i "$(awk '/^OPENSTACK_HOST/{ print NR }' /etc/openstack-dashboard/local_settings)s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
+echo 4
 sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
-sed -i "$(awk '/^ALLOWED_HOSTS/{ print NR }' /etc/openstack-dashboard/local_settings)s/\'horizon.example.com\',/$(IFS="," hzallowhosts="localhost,forty.com" for x in $hzallowhosts; do echo -n "'$x', "; done)/" /etc/openstack-dashboard/local_settings
+echo 5
+IFS=","
+hzcleanedhosts=$(for x in $hzallowedhosts; do echo -n "'$x', "; done)
+echo 6
+sed -i "$(awk '/^ALLOWED_HOSTS/{ print NR }' /etc/openstack-dashboard/local_settings)s/'horizon.example.com',/$hzcleanedhosts/" /etc/openstack-dashboard/local_settings
+echo 7
 sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True\nOPENSTACK_API_VERSIONS = {\n\t\"identity\": 3,\n\t\"image\": 2,\n\t\"volume\": 3,\n}\n\nOPENSTACK_KEYSTONE_DEFAULT_DOMAIN = \"Default\"\nOPENSTACK_KEYSTONE_DEFAULT_ROLE = \"user\"" /etc/openstack-dashboard/local_settings
+echo 8
 sed -i "$(awk '/^TIME_ZONE/{ print NR }' /etc/openstack-dashboard/local_settings)s/"UTC"/$svrtz/" /etc/openstack-dashboard/local_settings
+echo 9
 
 # openstack-dashboard.conf file
 sed -i "/WSGIProcessGroup\ dashboard/aWSGIApplicationGroup\ %{GLOBAL}" /etc/httpd/conf.d/openstack-dashboard.conf
@@ -626,7 +672,9 @@ stage="connectivity to compute node"
 ping -c 1 -w computeip &>null
 
 stage="neutron controller"
-echo "installing neutron for controller"
+echo "==============================================="
+echo "      installing neutron for controller"
+echo "==============================================="
 
 # configure openstack
 srcopenrc
@@ -674,7 +722,9 @@ stage="connectivity to controller"
 
 ping -c 1 -w controllerip &>null
 stage="neutron compute node" 
-echo "installing neutron for compute node"
+echo "==============================================="
+echo "     installing neutron for compute node"
+echo "==============================================="
 
 # install neutron package
 dnf install -y openstack-neutron-openvswitch
@@ -706,7 +756,9 @@ neutron_block_node()
 stage="connectivity to compute1"
 ping -c 1 -w  &>null
 stage="neutron block node"
-echo "installing neutron for block storage node"
+echo "==============================================="
+echo "  installing neutron for block storage node"
+echo "==============================================="
 
 # database setup
 mysql -e "CREATE DATABASE neutron;"
@@ -725,6 +777,9 @@ swift_controller()
 # setup controller node for swift object storage
 stage="swift controller"
 
+echo "==============================================="
+echo "      installing swift controller node"
+echo "==============================================="
 # create openstack sift user and services
 srcopenrc
 openstack user create --domain default --password $SWIFT_PASS swift
@@ -758,6 +813,11 @@ swift_node()
 # install swift object storage on a storage node
 stage="swift node"
 
+
+
+echo "==============================================="
+echo "            installing swift node"
+echo "==============================================="
 # system setup
 dnf install -y xfsprogs rsync
 mkfs.xfs $storagedev1
@@ -848,7 +908,7 @@ sed -i /heatctrlstat/s/1/0/ resume_status
 
 controller_archetype()
 { 
-
+# set resume if errors
 sed -i /resume/s/0/1/ resume_status
 [ "$resume" == 1 ] && [ "$basestat" == "0" ] && echo "mariadb complete" || base_all 
 [ "$resume" == 1 ] && [ "$etcdstat" == "0" ] && echo "etcd complete" || etcd_all
@@ -861,7 +921,7 @@ sed -i /resume/s/0/1/ resume_status
 [ "$resume" == 1 ] && [ "$novactlstat" == "0" ] && echo "novactl complete" || nova_controller
 [ "$resume" == 1 ] && [ "$cinderctlstat" == "0" ] && echo "cinderctl complete" || cinder_controller
 [ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "horizon complete" || horizon
-
+# set no resume
 sed -i /resume/s/1/0/ resume_status
 }
 

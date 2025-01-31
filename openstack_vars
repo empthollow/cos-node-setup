@@ -12,8 +12,8 @@ cinderdev=/dev/sdb3
 # cinder controller ip
 cinderctrlip=$controllerip
 
-# set allowed hosts to access horizon
-hzallowedhosts=*
+# set allowed hosts to access horizon - comma separated
+hzallowedhosts="*"
 # Time Zone Abbr: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 srvtz=CST
 

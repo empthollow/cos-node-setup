@@ -11,11 +11,11 @@ etcdstat=0
 keystonestat=0
 glancestat=0
 placementstat=0
-novactlstat=1
+novactlstat=0
 novanodestat=1
-cinderctlstat=1
+cinderctlstat=0
 cindernodestat=1
 cinderbackupstat=1
-horizonstat=1
+horizonstat=0
 
 
