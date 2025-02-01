@@ -389,9 +389,9 @@ echo "==============================================="
 echo "   setting up placment for controller node"
 echo "==============================================="
 
-mysql -e "CREATE DATABASE placement;" || true
-mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' IDENTIFIED BY '$PLACEMENT_DBPASS';" || true
-mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '$PLACEMENT_DBPASS';" || true
+mysql -e "CREATE DATABASE placement;"
+mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' IDENTIFIED BY '$PLACEMENT_DBPASS';" 
+mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '$PLACEMENT_DBPASS';"
 srcopenrc
 openstack user list | grep -cw placement || openstack user create --domain default --password $PLACEMENT_PASS placement
 openstack role add --project service --user placement admin
@@ -402,7 +402,7 @@ openstack endpoint create --region RegionOne placement admin http://controller:8
 dnf install -y openstack-placement-api
 
 # writing placment config ...
-sed -i "/^\[placement_database\]/a connection = mysql+pymysql://keystone:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
+sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
 sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
 
