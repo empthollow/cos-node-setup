@@ -399,7 +399,7 @@ openstack service create --name placement --description "Placement API" placemen
 openstack endpoint create --region RegionOne placement public http://controller:8778
 openstack endpoint create --region RegionOne placement internal http://controller:8778
 openstack endpoint create --region RegionOne placement admin http://controller:8778
-dnf install -y openstack-placement-api
+dnf install -y openstack-placement-api python3-osc-placement
 
 # writing placment config ...
 sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
