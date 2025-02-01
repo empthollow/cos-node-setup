@@ -162,7 +162,7 @@ if [ -e "admin-openrc" ]; then
 	sleep 2
 else
 	echo -n "specify path (if no, files will be created) [y/n] >"
-	read specifypath
+	read -t 5 specifypath || specifypath="n"
 	if [ "$specifypath" == "y" ]; then  
 		echo -n "enter path of admin-openrc or equivalent file > "
 		read osadmin
@@ -413,7 +413,7 @@ dnf install -y openstack-placement-api
 # writing placment config ...
 sed -i "/^\[placement_database\]/a connection = mysql+pymysql://keystone:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
-sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \password = $PLACEMENT_PASS" /etc/placement/placement.conf
+sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
 
 # populating placement database
 su -s /bin/sh -c "placement-manage db sync" placement
