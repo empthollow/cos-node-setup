@@ -20,15 +20,6 @@ trap 'handle_error $LINENO' ERR
 [ "$(id -u)" -ne "0" ] && echo "you are not root: use 'sudo -s'" && exit
 
 
-### dir= "$(dirname "${BASH_SOURCE[0]}" && pwd)"
-dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-cd $dir 
-### pwd
-[ -e "openstack_passwords" ] && . openstack_passwords || { echo "openstack_passwords does not exist"; }
-[ -e "openstack_vars" ] && . openstack_vars || { echo "openstack_vars does not exist" && exit 1; }
-[ -e "resume_status" ] && . resume_status || { echo "resume_status does not exist" && exit 1; }
-### echo "$resume"
-### exit
 
 help()
 {
@@ -1083,22 +1074,70 @@ sed -i /resume/s/1/0/ resume_status
 echo "Resume states reset for full installation" && sleep 1
 }
 
+clean_resume()
+{
+resumefrom=$(sed -n '6,$p' resume_status | grep '1$' | head -1 | grep -oE '[a-z]{1,20}')
+case $resumefrom in
+	basestat		) clean_base_all ;;
+	mariadbstat		) clean_etcd_all ;;
+	rabbitmqstat		) clean_mariadb_controller ;;
+	memcachedstat		) clean_rabbitmq_controller ;;
+	etcdstat		) clean_memcached_controller ;;
+	keystonestat		) clean_keystone_controller ;;
+	glancestat		) clean_glance_controller ;;
+	placementstat		) clean_placement_controller ;;
+	novactlstat		) clean_nova_controller ;;
+	novanodestat		) ;;
+	cinderctlstat		) clean_cinder_controller ;;
+	cindernodestat		) ;;
+	cinderbackupstat	) ;;
+	horizonstat		) clean_horizon ;;
+
+esac
+}
+
+confirmvars()
+{
+viewvars
+	echo "===================================================="
+	echo "            Current Hosts Config File               "
+	echo "===================================================="
+	echo ""
+	cat /etc/hosts
+	echo ""
+	echo -n "update hosts file? [y/n]> "
+	read update
+	[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "*****/etc/hosts updated*****" || { echo "*****/etc/hosts NOT updated*****" ; }
+	checkpasswords
+
+}
+
 resume_state()
 {
 if [ "$resume" == "1" ]; then
 	echo -n "It looks like the last installation didn't complete properly. Would you like to resume where it left off? [y/n]"
 	read rchoice
 	case $rchoice in 
-		y	)	echo "Resuming previous installation..." && sleep 1 ;;
+		y	)	echo "Resuming previous installation..." && sleep 1; clean_resume ;;
 		n	)	flush_resume ;;
 		*	)	echo "Invalid response" && resume_state	;;
 	esac
+else
+	confirmvars
 fi
 }
 
 
 
 # default execution
+# change to specific directory
+dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cd $dir 
+# check for inclusion files
+[ -e "openstack_passwords" ] && . openstack_passwords || { echo "openstack_passwords does not exist"; }
+[ -e "openstack_vars" ] && . openstack_vars || { echo "openstack_vars does not exist" && exit 1; }
+[ -e "resume_status" ] && . resume_status || { echo "resume_status does not exist" && exit 1; }
+# startup checks
 if [ "$1" ==  "" ]; then
 	echo "Designed for CentOS"
 	
@@ -1110,28 +1149,11 @@ if [ "$1" ==  "" ]; then
 		exit 1
 	fi
 	resume_state
-	viewvars
-	echo "===================================================="
-	echo "            Current Hosts Config File               "
-	echo "===================================================="
-	echo ""
-	cat /etc/hosts
-	echo ""
-	echo -n "update hosts file? [y/n]> "
-	read update
-	[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "*****/etc/hosts updated*****" || { echo "*****/etc/hosts NOT updated*****" ; }
-	checkpasswords
 	for x in $node 
 	do
 		${x}_archetype
 	done
 else
-	#args="$#"
-	#num="$(("$#" - "1"))"
-	#while [ "$num" -gt "-1" ]; do
-	#	$$(("$#" - "$num"))
-	#	((num--))
-	#done
 	for arg in "$@"
 	do
 		$arg
