@@ -908,6 +908,9 @@ sed -i /heatctrlstat/s/1/0/ resume_status
 
 controller_archetype()
 { 
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+echo "        installing controler archetype  "
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
 # set resume if errors
 sed -i /resume/s/0/1/ resume_status
 resumefrom=basestat
@@ -934,6 +937,9 @@ resumefrom=horizonstat
 [ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "horizon complete" || horizon
 # reset resume
 flush_resume
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+echo "    controler archetype install complete "
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
 }
 
 showips() {
