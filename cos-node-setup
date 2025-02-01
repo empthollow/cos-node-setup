@@ -453,9 +453,8 @@ openstack endpoint create --region RegionOne compute admin http://controller:877
 dnf install -y openstack-nova-api openstack-nova-conductor  openstack-nova-novncproxy openstack-nova-scheduler
 
 sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672/\nmy_ip = $controllerip"  /etc/nova/nova.conf
-sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
-sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
-sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api"  /etc/nova/nova.conf
+sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api" /etc/nova/nova.conf
+sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova" /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
