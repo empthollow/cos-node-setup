@@ -398,11 +398,11 @@ echo "==============================================="
 echo "   setting up placment for controller node"
 echo "==============================================="
 
-mysql -e "CREATE DATABASE placement;"
-mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' IDENTIFIED BY '$PLACEMENT_DBPASS';"
-mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '$PLACEMENT_DBPASS';"
+mysql -e "CREATE DATABASE placement;" || true
+mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'localhost' IDENTIFIED BY '$PLACEMENT_DBPASS';" || true
+mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '$PLACEMENT_DBPASS';" || true
 srcopenrc
-openstack user create --domain default --password $PLACEMENT_PASS placement
+openstack user list | grep -cw placement || openstack user create --domain default --password $PLACEMENT_PASS placement
 openstack role add --project service --user placement admin
 openstack service create --name placement --description "Placement API" placement
 openstack endpoint create --region RegionOne placement public http://controller:8778
@@ -910,19 +910,30 @@ controller_archetype()
 { 
 # set resume if errors
 sed -i /resume/s/0/1/ resume_status
-[ "$resume" == 1 ] && [ "$basestat" == "0" ] && echo "mariadb complete" || base_all 
+resumefrom=basestat
+[ "$resume" == 1 ] && [ "$basestat" == "0" ] && echo "base complete" || base_all 
+resumefrom=etcdstat
 [ "$resume" == 1 ] && [ "$etcdstat" == "0" ] && echo "etcd complete" || etcd_all
+resumefrom=mariadbstat
 [ "$resume" == 1 ] && [ "$mariadbstat" == "0" ] && echo "mariadb complete" || mariadb_controller
+resumefrom=rabbitmqstat
 [ "$resume" == 1 ] && [ "$rabbitmqstat" == "0" ] && echo "rabbitmq complete" || rabbitmq_controller
+resumefrom=memmcachedstat
 [ "$resume" == 1 ] && [ "$memcachedstat" == "0" ] && echo "memcached complete" || memcached_controller
+resumefrom=keystonestat
 [ "$resume" == 1 ] && [ "$keystonestat" == "0" ] && echo "keystone complete" || keystone_controller
+resumefrom=glanncestat
 [ "$resume" == 1 ] && [ "$glancestat" == "0" ] && echo "glance complete" || glance_controller
+resumefrom=placementstat
 [ "$resume" == 1 ] && [ "$placementstat" == "0" ] && echo "placement complete" || placement_controller
+resumefrom=novactlstat
 [ "$resume" == 1 ] && [ "$novactlstat" == "0" ] && echo "novactl complete" || nova_controller
+resumefrom=cinderctlstat
 [ "$resume" == 1 ] && [ "$cinderctlstat" == "0" ] && echo "cinderctl complete" || cinder_controller
+resumefrom=horizonstat
 [ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "horizon complete" || horizon
-# set no resume
-sed -i /resume/s/1/0/ resume_status
+# reset resume
+flush_resume
 }
 
 showips() {
