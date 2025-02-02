@@ -475,7 +475,6 @@ su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" nova
 su -s /bin/sh -c "nova-manage db sync" nova
 su -s /bin/sh -c "nova-manage cell_v2 list_cells" nova
 
-read -p "press enter to continue" go
 
 # enable services
 systemctl enable \
@@ -484,11 +483,16 @@ openstack-nova-scheduler.service \
 openstack-nova-conductor.service \
 openstack-nova-novncproxy.service
 
+
+read -p "press enter to continue" go
+
 # start services
 systemctl start \
 openstack-nova-api.service \
 openstack-nova-scheduler.service \
 openstack-nova-conductor.service 
+openstack-nova-novncproxy.service
+
 sed -i /novactlstat/s/1/0/ resume_status
 }
 
