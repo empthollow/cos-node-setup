@@ -411,6 +411,7 @@ su -s /bin/sh -c "placement-manage db sync" placement
 
 echo "restarting server..."
 systemctl restart httpd
+read -p "press enter to continue" go
 sed -i /placementstat/s/1/0/ resume_status
 }
 
