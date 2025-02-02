@@ -411,7 +411,6 @@ su -s /bin/sh -c "placement-manage db sync" placement
 
 echo "restarting server..."
 systemctl restart httpd
-read -p "press enter to continue" go
 sed -i /placementstat/s/1/0/ resume_status
 }
 
@@ -453,8 +452,10 @@ openstack endpoint create --region RegionOne compute public http://controller:87
 openstack endpoint create --region RegionOne compute internal http://controller:8774/v2.1
 openstack endpoint create --region RegionOne compute admin http://controller:8774/v2.1
 
+echo "installing nova packages..."
 dnf install -y openstack-nova-api openstack-nova-conductor  openstack-nova-novncproxy openstack-nova-scheduler
 
+echo "modifying nova configuration..."
 sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672/\nmy_ip = $controllerip"  /etc/nova/nova.conf
 sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api" /etc/nova/nova.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova" /etc/nova/nova.conf
@@ -473,6 +474,8 @@ su -s /bin/sh -c "nova-manage cell_v2 map_cell0" nova
 su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" nova
 su -s /bin/sh -c "nova-manage db sync" nova
 su -s /bin/sh -c "nova-manage cell_v2 list_cells" nova
+
+read -p "press enter to continue" go
 
 # enable services
 systemctl enable \
