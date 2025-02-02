@@ -469,6 +469,7 @@ sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default
 sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
 
 # populate nova-api db
+echo "populating nova databases..."
 su -s /bin/sh -c "nova-manage api_db sync" nova
 su -s /bin/sh -c "nova-manage cell_v2 map_cell0" nova
 su -s /bin/sh -c "nova-manage cell_v2 create_cell --name=cell1 --verbose" nova
@@ -477,6 +478,7 @@ su -s /bin/sh -c "nova-manage cell_v2 list_cells" nova
 
 
 # enable services
+
 systemctl enable \
 openstack-nova-api.service \
 openstack-nova-scheduler.service \
@@ -487,10 +489,11 @@ openstack-nova-novncproxy.service
 read -p "press enter to continue" go
 
 # start services
+echo "starting nova serices..."
 systemctl start \
 openstack-nova-api.service \
 openstack-nova-scheduler.service \
-openstack-nova-conductor.service 
+openstack-nova-conductor.service \
 openstack-nova-novncproxy.service
 
 sed -i /novactlstat/s/1/0/ resume_status
