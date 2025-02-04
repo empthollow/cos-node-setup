@@ -693,10 +693,11 @@ read -p "press enter to continue"
 echo "writing horizon config..."
 linemcd=$(awk '/^#CACHES/{ print NR }' /etc/openstack-dashboard/local_settings)
 #echo 1
-sed -i ""$linemcd"c\#$'\t'\ \'LOCATION\':\ \'controller:11211\'," /etc/openstack-dashboard/local_settings 
+sed -i '/^#SESSION_ENGINE/s/^#//p' /etc/openstack-dashboard/local_settings
 #echo 2
 sed -i "$linemcd,$(awk 'BEGIN { print $linemcd+5 }')s/^#//" /etc/openstack-dashboard/local_settings
 #echo 3
+sed -i /^OPENSTACK_KEYSTONE_URL/s/%s/%s:5000/p /etc/openstack-dashboard/local_settings
 sed -i "$(awk '/^OPENSTACK_HOST/{ print NR }' /etc/openstack-dashboard/local_settings)s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
 #echo 4
 sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
