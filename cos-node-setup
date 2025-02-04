@@ -697,7 +697,7 @@ sed -i '/^#SESSION_ENGINE/s/^#//p' /etc/openstack-dashboard/local_settings
 #echo 2
 sed -i "$linemcd,$(awk 'BEGIN { print $linemcd+5 }')s/^#//" /etc/openstack-dashboard/local_settings
 #echo 3
-sed -i /^OPENSTACK_KEYSTONE_URL/s/%s/%s:5000/p /etc/openstack-dashboard/local_settings
+sed -i '/^OPENSTACK_KEYSTONE_URL/s/%s/%s:5000/' /etc/openstack-dashboard/local_settings
 sed -i "$(awk '/^OPENSTACK_HOST/{ print NR }' /etc/openstack-dashboard/local_settings)s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
 #echo 4
 sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
