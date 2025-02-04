@@ -209,7 +209,6 @@ dnf config-manager --set-enabled crb
 dnf upgrade -y
 dnf install -y centos-release-openstack-$release
 dnf install -y python3-openstackclient openstack-selinux
-dnf install -y python3-openstackclient openstack-selinux
 sed -i /basestat/s/1/0/ resume_status
 }
 
@@ -405,6 +404,7 @@ echo "writing placment config ..."
 sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
 sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
+sed -i '/^<Virtual/a \ \ <Directory /usr/bin>\n\tRequire all granted \n\ \ </Directory>' /etc/httpd/conf.d/00-placement-api.conf
 
 echo "populating placement database..."
 su -s /bin/sh -c "placement-manage db sync" placement
