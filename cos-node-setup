@@ -517,7 +517,6 @@ openstack-nova-scheduler.service \
 openstack-nova-conductor.service \
 openstack-nova-novncproxy.service
 
-# read -p "press enter to continue" go
 
 # start services
 systemctl start \
@@ -689,7 +688,7 @@ echo "installing packages..."
 dnf install -y openstack-dashboard
 
 # config files
-
+read -p "press enter to continue"
 # local_settings file
 echo "writing horizon config..."
 linemcd=$(awk '/^#CACHES/{ print NR }' /etc/openstack-dashboard/local_settings)
