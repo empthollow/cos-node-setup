@@ -25,7 +25,8 @@ help()
 {
 echo "Syntax: cos-node-setup [ ARG ARG ARG ]
 ***valid arguments***:"
-awk '/(controller|all|node|archetype|resume|help)\(\)/{print  }' cos-node-setup | sed "s/[{|\(|\)]//g"
+#awk '/(controller|all|node|archetype|resume|help)\(\)/{print  }' cos-node-setup | sed "s/[{|\(|\)]//g"
+awk '/([a-z]{1,25}\(\))/{print  }' cos-node-setup | sed "s/[{|\(|\)]//g"
 }
 
 generatepasswords() {
