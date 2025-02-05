@@ -1111,11 +1111,12 @@ echo "SWIFT_PASS = $SWIFT_PASS"
 }
 
 genask() {
-echo -n "generate new passwords file? [y/n]> "
+echo -n "generate new passwords file? [y/n/x]> "
 read gen
-if [ "$gen" == "y" ]; then 
-	generatepasswords
-fi
+[ "$gen" == "y" ] && generatepasswords || { [ "$viewpw" == "x" ] && exit ; }
+#if [ "$gen" == "y" ]; then 
+#	generatepasswords
+#fi
 }
 
 checkpasswords() {
@@ -1127,12 +1128,16 @@ else
 	generatepasswords
 	
 fi
-echo -n "view passwords? [y/n]> "
+echo -n "view passwords? [y/n/x]> "
 read viewpw
-if [ "$viewpw" == "y" ] ; then
-	viewpasswords
-	genask
-fi
+[ "$viewpw" == "y" ] && viewpasswords && genask || { [ "$viewpw" == "x" ] && exit ; }
+
+#if [ "$viewpw" == "y" ] ; then
+#	viewpasswords
+#	genask
+#else
+#	exit
+#fi
 
 }
 
@@ -1175,9 +1180,14 @@ viewvars
 	echo ""
 	cat /etc/hosts
 	echo ""
-	echo -n "update hosts file? [y/n]> "
+	echo -n "update hosts file? [y/n/x]> "
 	read update
-	[ "$update" == "y" ] && cleanhosts && showips >> /etc/hosts && echo "*****/etc/hosts updated*****" || { echo "*****/etc/hosts NOT updated*****" ; }
+	case $update in 
+		y	)	cleanhosts && showips >> /etc/hosts && echo "*****/etc/hosts updated*****" ;;
+		n	)	echo "*****/etc/hosts NOT updated*****" ;;
+		x	)	exit ;;
+		*	)	echo "Invalid response" && resume_state	;;
+	esac
 	checkpasswords
 
 }
@@ -1185,11 +1195,12 @@ viewvars
 resume_state()
 {
 if [ "$resume" == "1" ]; then
-	echo -n "It looks like the last installation didn't complete properly. Would you like to resume where it left off? [y/n]"
+	echo -n "It looks like the last installation didn't complete properly. Would you like to resume where it left off? [y/n/x]"
 	read rchoice
 	case $rchoice in 
 		y	)	echo "Resuming previous installation..." && sleep 1; clean_resume ;;
 		n	)	flush_resume; resume=0 ;;
+		x	)	exit ;;
 		*	)	echo "Invalid response" && resume_state	;;
 	esac
 else
