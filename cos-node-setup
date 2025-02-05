@@ -693,24 +693,24 @@ dnf install -y openstack-dashboard
 
 echo "writing horizon config..."
 linemcd=$(awk '/^#CACHES/{ print NR }' /etc/openstack-dashboard/local_settings)
-echo $linemcd
-echo 1
+#echo $linemcd
+#echo 1
 sed -i '/^#SESSION_ENGINE/s/^#//' /etc/openstack-dashboard/local_settings
-echo 2
+#echo 2
 sed -i "$linemcd,$(awk -v line="$linemcd" 'BEGIN {print line + 5}')s/^#//" /etc/openstack-dashboard/local_settings
-echo 3
+#echo 3
 sed -i '/^OPENSTACK_KEYSTONE_URL/s/%s/%s:5000/' /etc/openstack-dashboard/local_settings
 sed -i "$(awk '/^OPENSTACK_HOST/{ print NR }' /etc/openstack-dashboard/local_settings)s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
-echo 4
+#echo 4
 sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
-echo 5
+#echo 5
 IFS=","
 hzcleanedhosts=$(for x in $hzallowedhosts; do echo -n "'$x', "; done)
-echo 6
+#echo 6
 sed -i "$(awk '/^ALLOWED_HOSTS/{ print NR }' /etc/openstack-dashboard/local_settings)s/'horizon.example.com',/$hzcleanedhosts/" /etc/openstack-dashboard/local_settings
-echo 7
+#echo 7
 sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True\nOPENSTACK_API_VERSIONS = {\n\t\"identity\": 3,\n\t\"image\": 2,\n\t\"volume\": 3,\n}\n\nOPENSTACK_KEYSTONE_DEFAULT_DOMAIN = \"Default\"\nOPENSTACK_KEYSTONE_DEFAULT_ROLE = \"user\"" /etc/openstack-dashboard/local_settings
-echo 8
+#echo 8
 sed -i "$(awk '/^TIME_ZONE/{ print NR }' /etc/openstack-dashboard/local_settings)s/"UTC"/$svrtz/" /etc/openstack-dashboard/local_settings
 #echo 9
 # openstack-dashboard.conf file
