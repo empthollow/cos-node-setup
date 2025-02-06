@@ -756,7 +756,7 @@ echo "writing neutron config..."
 sed -i "/^\[database\]/a connection = mysql+pymysql://neutron:$NEUTRON_DBPASS@controller/neutron" /etc/neutron/neutron.conf
 sed -i "/^\[DEFAULT\]/a core_plugin \= ml2\nservice_plugins \= router\ntransport_url \= rabbit://openstack:$RABBIT_PASS@controller\nauth_strategy \= keystone\nnotify_nova_on_port_status_changes \= true\nnotify_nova_on_port_data_changes \= true" /etc/neutron/neutron.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
-sed -i "/^\[[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/neutron.conf
+sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/neutron.conf
 sed -i "/^\[nova\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/neutron/neutron.conf
 
 # Configure the Modular Layer 2 (ML2) plug-in
@@ -772,6 +772,30 @@ sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = op
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch" /etc/neutron/l3_agent.ini
 # Configure the DHCP agent¶
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch\ndhcp_driver = neutron.agent.linux.dhcp.Dnsmasq\nenable_isolated_metadata = true" /etc/neutron/dhcp_agent.ini
+
+# metadata_agent.ini
+sed -i "/^\[DEFAULT\]/a nova_metadata_host = controller \nmetadata_proxy_shared_secret = METADATA_SECRET" metadata_agent.ini
+
+# nova.conf
+sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS\nservice_metadata_proxy = true\nmetadata_proxy_shared_secret = METADATA_SECRET" /etc/nova/nova.conf
+
+ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
+
+echo "populating database..."
+/bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
+
+echo "starting services..."
+
+systemctl restart openstack-nova-api.service
+systemctl enable neutron-server.service \
+neutron-openvswitch-agent.service neutron-dhcp-agent.service \
+neutron-metadata-agent.service\
+neutron-l3-agent.service
+
+systemctl start neutron-server.service \
+neutron-openvswitch-agent.service neutron-dhcp-agent.service \
+neutron-metadata-agent.service\
+neutron-l3-agent.service
 
 sed -i /neutronctrlstat/s/1/0/ resume_status
 }
