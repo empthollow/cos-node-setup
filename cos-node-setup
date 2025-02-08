@@ -154,7 +154,7 @@ if [ -e "admin-openrc" ]; then
 	sleep 2
 else
 	echo -n "specify path (if no, files will be created) [y/n] >"
-	read -t 5 specifypath || specifypath="n"
+	read -t 5 specifypath || { specifypath="n" && echo -e "\x0A" }
 	if [ "$specifypath" == "y" ]; then  
 		echo -n "enter path of admin-openrc or equivalent file > "
 		read osadmin
@@ -809,12 +809,12 @@ systemctl restart openstack-nova-api.service
 systemctl enable neutron-server.service \
 neutron-openvswitch-agent.service neutron-dhcp-agent.service \
 neutron-metadata-agent.service\
-neutron-l3-agent.service
+neutron-agent.service
 
 systemctl start neutron-server.service \
 neutron-openvswitch-agent.service neutron-dhcp-agent.service \
 neutron-metadata-agent.service\
-neutron-l3-agent.service
+neutron-agent.service
 
 sed -i /neutronctrlstat/s/1/0/ resume_status
 }
