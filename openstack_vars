@@ -4,7 +4,7 @@ controllerip=172.22.3.98
 computeip=172.22.3.32
 blockstoreip=172.22.3.33
 objectstoreip=172.22.3.34
-myuser=shoestring
+myuser=stacked
 
 # cinder
 # cinder storage device
