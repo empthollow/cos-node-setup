@@ -746,7 +746,6 @@ neutron_controller()
 {
 # install neutron networking on controller node
 stage="connectivity to compute node"
-ping -c 1 -w computeip &>null
 
 stage="neutron controller"
 echo "==============================================="
