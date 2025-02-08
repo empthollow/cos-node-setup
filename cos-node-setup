@@ -1161,7 +1161,11 @@ echo -n "Openstack Node (controller compute block object) : "
 read node
 echo -n "Set node IPs and optionally write to hosts file? [y/n/x]: "
 read hostsfile
-[ "$hostsfile" == "y" ] && writehosts || { [ "$hostsfile" == "x" ] && exit ; }
+case $hostfile in 
+		y	)	writehosts ;;
+		x	)	exit ;;
+		*	)	;;
+	esac
 
 }
 
@@ -1213,10 +1217,12 @@ echo "SWIFT_PASS = $SWIFT_PASS"
 genask() {
 echo -n "generate new passwords file? [y/n/x]> "
 read gen
-[ "$gen" == "y" ] && generatepasswords || { [ "$viewpw" == "x" ] && exit ; }
-#if [ "$gen" == "y" ]; then 
-#	generatepasswords
-#fi
+case $gen in 
+		y	)	generatepasswords ;;
+		x	)	exit ;;
+		*	)	;;
+	esac
+
 }
 
 checkpasswords() {
