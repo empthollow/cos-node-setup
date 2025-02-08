@@ -1,0 +1,16 @@
+
+clean_neutron() {
+  # Stop Neutron services
+  systemctl stop openstack-neutron-server.service
+
+  # Uninstall Neutron packages
+  dnf remove -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvswitch ebtables
+
+  # Remove Neutron configuration files
+  rm -rf /etc/neutron /var/lib/neutron
+
+  # Delete Neutron MySQL database and user
+  mysql -u root -p -e "DROP DATABASE neutron;"
+  mysql -u root -p -e "DELETE FROM mysql.user WHERE User='neutron';"
+}
+
