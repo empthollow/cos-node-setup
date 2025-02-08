@@ -794,7 +794,7 @@ sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch" /etc/neutron/l3_agent.in
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch\ndhcp_driver = neutron.agent.linux.dhcp.Dnsmasq\nenable_isolated_metadata = true" /etc/neutron/dhcp_agent.ini
 
 # metadata_agent.ini
-sed -i "/^\[DEFAULT\]/a nova_metadata_host = controller \nmetadata_proxy_shared_secret = METADATA_SECRET" metadata_agent.ini
+sed -i "/^\[DEFAULT\]/a nova_metadata_host = controller \nmetadata_proxy_shared_secret = METADATA_SECRET" /etc/neutron/metadata_agent.ini
 
 # nova.conf
 sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS\nservice_metadata_proxy = true\nmetadata_proxy_shared_secret = METADATA_SECRET" /etc/nova/nova.conf
