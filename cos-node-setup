@@ -1231,7 +1231,6 @@ else
 fi
 echo -n "view passwords? [y/n/x]> "
 read viewpw
-[ "$viewpw" == "y" ] && viewpasswords && genask || { [ "$viewpw" == "x" ] && exit ; }
 case $viewpw in 
 		y	)	viewpasswords; genask ;;
 		x	)	exit ;;
