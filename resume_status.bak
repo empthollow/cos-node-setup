@@ -1,21 +1,19 @@
 # resume tracking for failed installs
 # set resume to 1 to resume previous install
-resume=1
-# set status variable to 1 for install, 2 for skip
-# to reset all to zero run 'cos-node-setup flush_resume'
+resume=0
+# set status variable to 1 for install, 0 for skip
+# to reset all to default run 'cos-node-setup flush_resume'
 basestat=1
+component=1
+etcdstat=1
 mariadbstat=1
 rabbitmqstat=1
 memcachedstat=1
-etcdstat=1
 keystonestat=1
 glancestat=1
 placementstat=1
-novactlstat=1
-novanodestat=1
-cinderctlstat=1
-cindernodestat=1
-cinderbackupstat=1
+novastat=1
+cinderstat=1
 horizonstat=1
 
 
