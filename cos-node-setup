@@ -225,16 +225,18 @@ sed -i "/^#allow/a allow $mgmtsubnet" /etc/chrony.conf
 systemctl enable chronyd.service
 systemctl start chronyd.service
 chronyc sources
+echo "### components controller install complete ###"
 }
 
 components_node()
 {
 dnf install -y chrony
 sed -i 's/^pool/#pool/p' /etc/chrony.conf
-sed -i "s/^#pool/server\ controller\ iburst" /etc/chrony.conf
+sed -i "/^#pool/a server\ controller\ iburst" /etc/chrony.conf
 systemctl enable chronyd.service
 systemctl start chronyd.service
 chronyc sources
+echo "### components node install complete ###"
 }
 
 mariadb_controller() {
@@ -565,9 +567,9 @@ sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = 
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
-sed -i "/^\[vnc\]/a enabled = true\nserver_listen = 0.0.0.0\nserver_proxyclient_address = $computeip\nnovncproxy_base_url = http://controller:6080/vnc_auto.html"
-sed -i "/^\[glance\]/a api_servers = http://controller:9292"
-sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp"
+sed -i "/^\[vnc\]/a enabled = true\nserver_listen = 0.0.0.0\nserver_proxyclient_address = $computeip\nnovncproxy_base_url = http://controller:6080/vnc_auto.html" /etc/nova/nova.conf
+sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
+sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = http://controller:5000/v3\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 
 # finalize installation
