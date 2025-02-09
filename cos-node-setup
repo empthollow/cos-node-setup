@@ -231,7 +231,7 @@ echo "### components controller install complete ###"
 components_node()
 {
 dnf install -y chrony
-sed -i 's/^pool/#pool/p' /etc/chrony.conf
+sed -i 's/^pool/#pool/' /etc/chrony.conf
 sed -i "/^#pool/a server\ controller\ iburst" /etc/chrony.conf
 systemctl enable chronyd.service
 systemctl start chronyd.service
@@ -559,7 +559,7 @@ echo "      installing nove for compute node"
 echo "==============================================="
 
 echo "installing nova packages..."
-dnf install -y openstack-nova-compute
+dnf install -y openstack-nova-compute libvirt-daemon
 
 # write configs
 echo "writing nova config..."
