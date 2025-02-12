@@ -278,6 +278,8 @@ echo "starting service..."
 systemctl enable --now rabbitmq-server
 
 echo "setting permissions..."
+firewall-cmd --add-port=5672/tcp --permanent
+firewall-cmd --reload
 rabbitmqctl add_user openstack $RABBIT_PASS
 rabbitmqctl set_permissions openstack ".*" ".*" ".*"
 sed -i /rabbitmqstat/s/1/0/ resume_status
@@ -297,6 +299,9 @@ dnf install -y memcached python3-memcached
 
 echo "writing memcached config..."
 sed -i s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
+firewall-cmd --add-port=11211/tcp --permanent
+firewall-cmd --reload
+
 
 echo "starting service..."
 systemctl enable --now memcached.service
@@ -328,6 +333,10 @@ ETCD_ADVERTISE_CLIENT_URLS=\"http://$controllerip:2379\"
 ETCD_INITIAL_CLUSTER=\"controller=http://$controllerip:2380\"
 ETCD_INITIAL_CLUSTER_TOKEN=\"etcd-cluster-01\"
 ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
+firewall-cmd --add-port=2379/tcp --permanent
+firewall-cmd --add-port=2380/tcp --permanent
+firewall-cmd --reload
+
 
 echo "starting service..."
 systemctl enable --now etcd
@@ -363,6 +372,8 @@ keystone-manage bootstrap --bootstrap-password $ADMIN_PASS \
   --bootstrap-region-id RegionOne
 sed -i '/\#ServerName/a ServerName controller' /etc/httpd/conf/httpd.conf
 ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/
+firewall-cmd --add-port=5000/tcp --permanent
+firewall-cmd --reload
 
 echo "starting httpd server..."
 systemctl enable --now httpd.service
@@ -419,6 +430,8 @@ sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.
 sed -i '/^\#default_backend/a default_backend = fs' /etc/glance/glance-api.conf
 sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images/@' /etc/glance/glance-api.conf
 sed -i "/^\[oslo_limit\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS"  /etc/glance/glance-api.conf
+firewall-cmd --add-port=9292/tcp --permanent
+firewall-cmd --reload
 
 # echo "configuring openstack..."
 
@@ -458,6 +471,9 @@ sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACE
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
 sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
 sed -i '/^<Virtual/a \ \ <Directory /usr/bin>\n\tRequire all granted \n\ \ </Directory>' /etc/httpd/conf.d/00-placement-api.conf
+firewall-cmd --add-port=8778/tcp --permanent
+firewall-cmd --reload
+
 
 echo "populating placement database..."
 su -s /bin/sh -c "placement-manage db sync" placement
@@ -521,6 +537,8 @@ sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = http://controller:5000/v3\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
+firewall-cmd --add-port=8774/tcp --permanent
+firewall-cmd --reload
 
 # populate nova-api db
 echo "populating databases..."
@@ -549,7 +567,7 @@ openstack-nova-novncproxy.service
 sed -i /novastat/s/1/0/ resume_status
 echo "### nova install compelete ###"
 }
-
+### Firewall rules
 nova_compute_node()
 {
 # install nova
@@ -563,7 +581,8 @@ dnf install -y openstack-nova-compute libvirt-daemon
 
 # write configs
 echo "writing nova config..."
-sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller\nmy_ip = $controllerip"  /etc/nova/nova.conf
+chown -R nova:nova /usr/lib/python3.9/site-packages/
+sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nmy_ip = $controllerip\ncompute_driver = libvirt.LibvirtDriver"  /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
@@ -626,10 +645,13 @@ echo "installing cinder packages..."
 dnf install -y openstack-cinder
 
 echo "writing cinder config..."
-sed -i "/^\[DEFAULT\]/a transport_url = rabbit://openstack:$RABBIT_PASS@controller\nauth_strategy = keystone\nmy_ip = $controllerip" /etc/cinder/cinder.conf
+sed -i "/^\[DEFAULT\]/a transport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone\nmy_ip = $controllerip" /etc/cinder/cinder.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
 sed -i "/^\[cinder\]/a os_region_name = RegionOne" /etc/nova/nova.conf
+firewall-cmd --add-port=8776/tcp --permanent
+firewall-cmd --reload
+
 
 # populate database
 echo "populating database ..."
@@ -664,7 +686,7 @@ echo "installing cinder packages..."
 dnf install -y openstack-cinder targetcli
 
 echo "writing cinder config..."
-sed -i "/^\[DEFAULT\]/a my_ip = $cinderctrlip\nenabled_backends = lvm\nglance_api_servers = http://controller:9292\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller\nauth_strategy = keystone" /etc/lvm/lvm.conf
+sed -i "/^\[DEFAULT\]/a my_ip = $cinderctrlip\nenabled_backends = lvm\nglance_api_servers = http://controller:9292\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone" /etc/lvm/lvm.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/lvm/lvm.conf
 sed -i "/^\[lvm\]/a \nvolume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver\nvolume_group = cinder-volumes\ntarget_protocol = iscsi\ntarget_helper = lioadm" /etc/lvm/lvm.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/lvm/lvm.conf
@@ -741,6 +763,9 @@ sed -i "$(awk '/^TIME_ZONE/{ print NR }' /etc/openstack-dashboard/local_settings
 #echo 9
 # openstack-dashboard.conf file
 sed -i "/WSGIProcessGroup\ dashboard/aWSGIApplicationGroup\ %{GLOBAL}" /etc/httpd/conf.d/openstack-dashboard.conf
+firewall-cmd --add-port=9090/tcp --permanent
+firewall-cmd --reload
+
 
 echo "restarting services..."
 systemctl restart httpd.service memcached.service
@@ -779,7 +804,7 @@ dnf install -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvsw
 # config neutron.conf
 echo "writing neutron config..."
 sed -i "/^\[database\]/a connection = mysql+pymysql://neutron:$NEUTRON_DBPASS@controller/neutron" /etc/neutron/neutron.conf
-sed -i "/^\[DEFAULT\]/a core_plugin \= ml2\nservice_plugins \= router\ntransport_url \= rabbit://openstack:$RABBIT_PASS@controller\nauth_strategy \= keystone\nnotify_nova_on_port_status_changes \= true\nnotify_nova_on_port_data_changes \= true" /etc/neutron/neutron.conf
+sed -i "/^\[DEFAULT\]/a core_plugin \= ml2\nservice_plugins \= router\ntransport_url \= rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy \= keystone\nnotify_nova_on_port_status_changes \= true\nnotify_nova_on_port_data_changes \= true" /etc/neutron/neutron.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/neutron.conf
 sed -i "/^\[nova\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/neutron/neutron.conf
@@ -808,6 +833,9 @@ ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
 
 echo "populating database..."
 /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
+firewall-cmd --add-port=9696/tcp --permanent
+firewall-cmd --reload
+
 
 echo "starting services..."
 
@@ -837,7 +865,7 @@ echo "==============================================="
 dnf install -y openstack-neutron-openvswitch
 
 # configure neutron.conf
-sed -i "/^\[DEFAULT\]/a transport_url \= rabbit://openstack:$RABBIT_PASS@controller\nauth_strategy \= keystone" /etc/neutron/neutron.conf
+sed -i "/^\[DEFAULT\]/a transport_url \= rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy \= keystone" /etc/neutron/neutron.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
 sed -i "/^\[[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/neutron.conf
 
@@ -917,6 +945,9 @@ sed -i -e '/egg:swift#keystoneauth/{s/^#\ //' -e 'a operator_roles = admin,user}
 sed -i -e '/\[filter:authtoken\]/s/^#\ //' /etc/swift/proxy-server.conf
 sed -i -e "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware.auth_token:filter_factory\nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_id = default\nuser_domain_id = default\nproject_name = service\nusername = swift\npassword = $SWIFT_PASS\n delay_auth_decision = True" /etc/swift/proxy-server.conf
 sed -i -e '/^\[filter:cache\]/,/^\[/{/egg:swift#memcache/a memcache_servers = controller:11211}' /etc/swift/proxy-server.conf
+firewall-cmd --add-port=8080/tcp --permanent
+firewall-cmd --reload
+
 
 # set resume status
 sed -i /swiftctrlstat/s/1/0/ resume_status
