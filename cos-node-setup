@@ -609,7 +609,7 @@ fi
 echo "starting services..."
 systemctl enable libvirtd.service openstack-nova-compute.service
 systemctl start libvirtd.service openstack-nova-compute.service
-sed -i /novanodestat/s/1/0/ resume_status
+sed -i /novastat/s/1/0/ resume_status
 
 echo "### nova install complete ###"
 echo "nova compute (node) set up; run the following to discover hosts manually on the controller node\nsu -s /bin/sh -c \"nova-manage cell_v2 discover_hosts --verbose\" nova"
@@ -1297,7 +1297,7 @@ case $resumeclea in
 	glancestat		) clean_glance_controller ;;
 	placementstat		) clean_placement_controller ;;
 	novastat		) clean_nova_controller ;;
-	novanodestat		) ;;
+	novastat		) ;;
 	cinderstat		) clean_cinder_controller ;;
 	cindernodestat		) ;;
 	cinderbackupstat	) ;;
