@@ -1,9 +1,9 @@
 release=bobcat
-node="controller"
-controllerip=172.22.3.98
-computeip=172.22.3.32
-blockstoreip=172.22.3.33
-objectstoreip=172.22.3.34
+node="computenode"
+controllerip=172.22.3.21
+computeip=172.22.3.22
+blockstoreip=172.22.3.23
+objectstoreip=172.22.3.24
 myuser=stacked
 
 # cinder
