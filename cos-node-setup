@@ -15,7 +15,7 @@ exit 1
 }
 
 # Trap errors and call the error handler
-trap 'handle_error $LINENO' ERR
+trap 'handle_error $LINENO' ERR EXIT HUP INT QUIT TERM PIPE
 
 [ "$(id -u)" -ne "0" ] && echo "you are not root: use 'sudo -s'" && exit
 
@@ -613,7 +613,7 @@ sed -i /novastat/s/1/0/ resume_status
 
 echo "### nova install complete ###"
 echo "nova compute (node) set up; run the following to discover hosts manually on the controller node\nsu -s /bin/sh -c \"nova-manage cell_v2 discover_hosts --verbose\" nova"
-read -t 10 -p "press enter to continue" || true
+read -t 10 -p "press enter to continue" || echo ""
 }
 
 cinder_controller()
@@ -870,7 +870,8 @@ sed -i "/^\[[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron
 
 # Configure the Open vSwitch agent¶
 sed -i "/^\ovs[\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
-sed -i "/^\[vxlan\]/a local_ip = $overlayip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini sed -i "/^\[securitygroup\]/a " /etc/neutron/plugins/ml2/openvswitch_agent.ini
+sed -i "/^\[vxlan\]/a local_ip = $overlayip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
+sed -i "/^\[securitygroup\]/a " /etc/neutron/plugins/ml2/openvswitch_agent.ini
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 
 # configure compute to use networking
