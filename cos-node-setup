@@ -613,7 +613,7 @@ sed -i /novanodestat/s/1/0/ resume_status
 
 echo "### nova install complete ###"
 echo "nova compute (node) set up; run the following to discover hosts manually on the controller node\nsu -s /bin/sh -c \"nova-manage cell_v2 discover_hosts --verbose\" nova"
-read -t 5 -p "press enter to continue" 
+read -t 5 -p "press enter to continue" || true
 }
 
 cinder_controller()
