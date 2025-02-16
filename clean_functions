@@ -1,16 +1,568 @@
+#!/bin/bash
 
-clean_neutron() {
-  # Stop Neutron services
-  systemctl stop openstack-neutron-server.service
+clean_components_controller()
+{
+# Remove the installed package
+echo "removing packages..."
+dnf remove -y chrony
 
-  # Uninstall Neutron packages
-  dnf remove -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvswitch ebtables
+# Restore the original configuration if saved
+echo "restoring configs..."
+orig="/etc/chrony.conf.bak"
+restore_config
 
-  # Remove Neutron configuration files
-  rm -rf /etc/neutron /var/lib/neutron
+# Disable and stop the service
+echo "stopping services..."
+systemctl disable chronyd.service
+systemctl stop chronyd.service
 
-  # Delete Neutron MySQL database and user
-  mysql -u root -p -e "DROP DATABASE neutron;"
-  mysql -u root -p -e "DELETE FROM mysql.user WHERE User='neutron';"
+echo "### cleanup completed ###"
 }
 
+clean_components_node()
+{
+
+
+# Stop and disable chronyd service
+echo "stopping services..."
+systemctl stop chronyd.service
+systemctl disable chronyd.service
+
+# Restore the original configuration if a backup exists
+echo "restoring configs..."
+orig="/etc/chrony.conf"
+restore_config
+
+# Remove chrony if it was installed by the script
+echo "removing packages..."
+dnf remove -y chrony
+
+echo "### cleanup completed ###"
+}
+
+clean_mariadb_controller()
+{
+echo "cleaning up MariaDB..."
+
+# Stop and disable MariaDB service
+echo "stopping services..."
+systemctl stop mariadb.service
+systemctl disable mariadb.service
+
+# Restore the original MariaDB configuration if a backup exists
+echo "restoring configs..."
+orig="/etc/my.cnf.d/openstack.cnf"
+restore_config
+
+# Remove MariaDB packages
+echo "removing packages"
+dnf remove -y mariadb mariadb-server python3-PyMySQL
+
+fi
+
+echo "### cleanup completed ###"
+}
+
+clean_rabbitmq_controller()
+{
+echo "Starting clean up script for RabbitMQ..."
+
+# Stop and disable RabbitMQ service
+echo "stopping services"
+systemctl stop rabbitmq-server
+systemctl disable rabbitmq-server
+
+# Remove RabbitMQ packages
+echo "removing packages..."
+dnf remove -y rabbitmq-server
+
+# Remove RabbitMQ user if it exists
+if rabbitmqctl list_users | grep -q openstack; then
+    rabbitmqctl delete_user openstack
+    echo "Removed RabbitMQ user 'openstack'..."
+else
+    echo "RabbitMQ user 'openstack' not found, skipping removal..."
+fi
+
+# Remove firewall rule
+firewall-cmd --remove-port=5672/tcp --permanent
+firewall-cmd --reload
+echo "Removed RabbitMQ firewall rule..."
+
+
+echo "### cleanup completed ###"
+}
+
+clean_memcached_controller()
+{
+echo "cleaning up  Memcached..."
+
+# Stop and disable Memcached service
+echo "stopping services..."
+systemctl stop memcached
+systemctl disable memcached
+
+# Remove Memcached packages
+echo "removing packages..."
+dnf remove -y memcached python3-memcached
+
+# Restore original Memcached config if backup exists
+echo "restoring configs..."
+orig="/etc/sysconfig/memcached"
+restore_config
+
+# Remove firewall rule for Memcached
+firewall-cmd --remove-port=11211/tcp --permanent
+firewall-cmd --reload
+echo "Removed Memcached firewall rule."
+
+echo "### cleanup completed ###"
+}
+
+clean_etcd_controller()
+{
+
+# stop and disable etcd service
+echo "stopping services..."
+systemctl stop etcd
+systemctl disable etcd
+
+# remove etcd package
+echo "removing packages..."
+dnf remove -y etcd
+
+
+# remove firewall rules for etcd
+echo "removing firewall rules..."
+firewall-cmd --remove-port=2379/tcp --permanent
+firewall-cmd --remove-port=2380/tcp --permanent
+firewall-cmd --reload
+
+echo "### undo script for etcd completed ###"
+}
+
+clean_keystone_controller()
+{
+
+# stop and disable httpd service
+echo "stopping services..."
+systemctl stop httpd
+systemctl disable httpd
+echo "stopped and disabled httpd service..."
+
+# remove keystone packages
+dnf remove -y openstack-keystone httpd mod_wsgi
+echo "removed keystone packages..."
+
+# restore original keystone config if backup exists
+echo "restoring configs..."
+orig="/etc/keystone/keystone.conf"
+restore_config
+echo "restoring configs..."
+orig="/etc/httpd/conf/httpd.conf"
+restore_config
+
+# remove keystone database
+echo "removing database…"
+mysql -e "DROP DATABASE IF EXISTS keystone;"
+mysql -e "DROP USER IF EXISTS 'keystone'@'localhost';"
+mysql -e "DROP USER IF EXISTS 'keystone'@'%';"
+
+# remove keystone apache configuration
+rm -f /etc/httpd/conf.d/wsgi-keystone.conf
+echo "removed keystone apache configuration..."
+
+# remove firewall rule
+echo "removing firewall rules..."
+firewall-cmd --remove-port=5000/tcp --permanent
+firewall-cmd --reload
+
+echo "### undo script for keystone completed ###"
+}
+
+clean_glance_controller()
+{
+
+# stop and disable glance service
+systemctl stop openstack-glance-api
+systemctl disable openstack-glance-api
+echo "stopped and disabled glance service..."
+
+# remove glance packages
+dnf remove -y openstack-glance
+echo "removed glance packages..."
+
+# restore original glance config if backup exists
+echo "restoring configs..."
+orig="/etc/glance/glance-api.conf"
+restore_config
+
+# remove glance database
+echo "removing database…"
+mysql -e "DROP DATABASE IF EXISTS glance;"
+mysql -e "DROP USER IF EXISTS 'glance'@'localhost';"
+mysql -e "DROP USER IF EXISTS 'glance'@'%';"
+
+# remove glance openstack services and roles
+echo "removing openstack user..."
+srcopenrc
+openstack user delete glance
+openstack project delete service
+openstack service delete image
+
+# remove glance endpoints
+echo "removing openstack endpoints..."
+openstack endpoint delete $(openstack endpoint list --service image -c ID -f value)
+
+# remove firewall rule
+echo "removing firewall rules..."
+firewall-cmd --remove-port=9292/tcp --permanent
+firewall-cmd --reload
+
+echo "### undo script for glance completed ###"
+}
+
+clean_placement_controller()
+{
+
+# stop and disable httpd service
+echo "stopping services..."
+systemctl stop httpd
+systemctl disable httpd
+
+# remove placement packages
+echo "removing packages..."
+dnf remove -y openstack-placement-api python3-osc-placement
+
+# restore original placement config if backup exists
+echo "restoring configs..."
+orig="/etc/placement/placement.conf"
+restore_config
+echo "restoring configs..."
+orig="/etc/httpd/conf.d/00-placement-api.conf"
+restore_config
+
+# remove placement database
+echo "removing database..."
+mysql -e "DROP DATABASE IF EXISTS placement;"
+mysql -e "DROP USER IF EXISTS 'placement'@'localhost';"
+mysql -e "DROP USER IF EXISTS 'placement'@'%';"
+
+# remove placement openstack services and roles
+echo "reverting openstack config"
+srcopenrc
+openstack user delete placement
+openstack service delete placement
+openstack endpoint delete $(openstack endpoint list --service placement -c ID -f value)
+
+# remove firewall rule
+echo "removing firewall rules..."
+firewall-cmd --remove-port=8778/tcp --permanent
+firewall-cmd --reload
+
+echo "### undo script for placement completed ###"
+}
+
+clean_nova_controller()
+{
+
+# stop and disable nova services
+echo "stopping services..."
+systemctl stop openstack-nova-api.service openstack-nova-scheduler.service openstack-nova-conductor.service openstack-nova-novncproxy.service
+systemctl disable openstack-nova-api.service openstack-nova-scheduler.service openstack-nova-conductor.service openstack-nova-novncproxy.service
+
+# remove nova packages
+echo "removing packages..."
+dnf remove -y openstack-nova-api openstack-nova-conductor openstack-nova-novncproxy openstack-nova-scheduler
+
+# restore original nova config if backup exists
+echo "restoring configs..."
+orig="/etc/nova/nova.conf"
+restore_config
+
+# remove nova databases
+echo "removing database..."
+mysql -e "DROP DATABASE IF EXISTS nova_api;"
+mysql -e "DROP DATABASE IF EXISTS nova;"
+mysql -e "DROP DATABASE IF EXISTS nova_cell0;"
+mysql -e "DROP USER IF EXISTS 'nova'@'localhost';"
+mysql -e "DROP USER IF EXISTS 'nova'@'%';"
+
+# remove nova openstack services and roles
+echo "reverting openstack config..."
+srcopenrc
+openstack user delete nova
+openstack service delete nova
+openstack endpoint delete $(openstack endpoint list --service nova -c ID -f value)
+
+# remove firewall rule
+echo "removing firewall rules"
+firewall-cmd --remove-port=8774/tcp --permanent
+firewall-cmd --reload
+
+echo "### undo script for nova completed ###"
+}
+
+clean_nova_compute_node()
+{
+
+# stop and disable nova compute services
+echo "stopping services..."
+systemctl stop libvirtd.service openstack-nova-compute.service
+systemctl disable libvirtd.service openstack-nova-compute.service
+
+# remove nova compute packages
+echo "removing packages..."
+dnf remove -y openstack-nova-compute libvirt-daemon
+
+# restore original nova config if backup exists
+echo "restoring configs..."
+orig="/etc/nova/nova.conf"
+restore_config
+
+# remove vnc proxy firewall rule
+echo "removing firewall rules"
+firewall-cmd --remove-port=6080/tcp --permanent
+firewall-cmd --reload
+
+echo "### undo script for nova compute node completed ###"
+}
+
+clean_cinder_controller()
+{
+
+# stop and disable cinder services
+echo "stopping services..."
+systemctl stop openstack-cinder-api.service openstack-cinder-scheduler.service
+systemctl disable openstack-cinder-api.service openstack-cinder-scheduler.service
+
+# remove cinder packages
+echo "removing packages..."
+dnf remove -y openstack-cinder
+
+# restore original cinder config if backup exists
+echo "restoring configs..."
+orig="/etc/cinder/cinder.conf"
+restore_config
+
+# remove cinder-related nova config modification if backup exists
+echo "restoring configs..."
+orig="/etc/nova/nova.conf"
+restore_config
+
+# remove database
+echo "removing database..."
+mysql -e "DROP DATABASE IF EXISTS cinder;"
+mysql -e "DROP USER IF EXISTS 'cinder'@'localhost';"
+mysql -e "DROP USER IF EXISTS 'cinder'@'%';"
+echo "removed cinder database and users…"
+
+# remove openstack user and service
+echo "reverting openstack config..."
+srcopenrc
+openstack user delete cinder || true
+openstack service delete volumev3 || true
+
+# remove firewall rule
+echo "removing firewall rules..."
+firewall-cmd --remove-port=8776/tcp --permanent
+firewall-cmd --reload
+
+echo "### undo script for cinder controller completed ###"
+}
+
+clean_cinder_node()
+{
+
+# stop and disable cinder volume services
+systemctl stop openstack-cinder-volume.service target.service
+systemctl disable openstack-cinder-volume.service target.service
+echo "stopped and disabled cinder volume services…"
+
+# remove cinder packages
+dnf remove -y openstack-cinder targetcli
+echo "removed cinder and targetcli packages…"
+
+# restore original lvm config if backup exists
+echo "restoring configs..."
+orig="/etc/lvm/lvm.conf"
+if [ -f "${orig}.bak" ]; then
+	    mv -f "${orig}.bak" "$orig"
+	        echo "restored original lvm configuration…"
+	else
+		    echo "no backup found for $orig, skipping restoration…"
+fi
+
+# remove storage volume if exists
+if vgdisplay cinder-volumes &>/dev/null; then
+	    vgremove -f cinder-volumes
+	        pvremove -f /dev/$cinderdev
+		    echo "removed volume group and physical volume for cinder…"
+	    else
+		        echo "no cinder volume group found, skipping removal…"
+fi
+
+echo "### undo script for cinder block storage node completed ###"
+}
+
+clean_cinder_backupnode()
+{
+
+}
+
+clean_horizon()
+{
+
+# stop and disable services
+systemctl stop httpd.service memcached.service
+systemctl disable httpd.service memcached.service
+echo "stopped and disabled httpd and memcached services…"
+
+# remove horizon packages
+dnf remove -y openstack-dashboard
+echo "removed openstack-dashboard package…"
+
+# restore original configuration if backup exists
+config="/etc/openstack-dashboard/local_settings"
+if [ -f "${config}.bak" ]; then
+	    mv -f "${config}.bak" "$config"
+	        echo "restored original horizon configuration…"
+	else
+		    echo "no backup found for $config, skipping restoration…"
+fi
+
+# restore httpd config if backup exists
+httpd_config="/etc/httpd/conf.d/openstack-dashboard.conf"
+if [ -f "${httpd_config}.bak" ]; then
+	    mv -f "${httpd_config}.bak" "$httpd_config"
+	        echo "restored original httpd configuration…"
+	else
+		    echo "no backup found for $httpd_config, skipping restoration…"
+fi
+
+# remove firewall rules
+firewall-cmd --remove-port=9090/tcp --permanent
+firewall-cmd --reload
+echo "removed firewall rule for Horizon dashboard…"
+
+echo "### undo script for horizon dashboard completed ###"
+}
+
+clean_neutron_controller()
+{
+echo "cleaning up  Neutron Controller…"
+
+# Stop and disable Neutron services
+echo "Stopping and disabling Neutron services..."
+systemctl stop neutron-server.service neutron-openvswitch-agent.service neutron-dhcp-agent.service neutron-metadata-agent.service neutron-l3-agent.service
+systemctl disable neutron-server.service neutron-openvswitch-agent.service neutron-dhcp-agent.service neutron-metadata-agent.service neutron-l3-agent.service
+
+# Remove Neutron packages
+echo "Removing Neutron packages..."
+dnf remove -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvswitch ebtables
+
+# Restore original configuration files if backups exist
+config_files=(
+    "/etc/neutron/neutron.conf"
+    "/etc/neutron/plugins/ml2/ml2_conf.ini"
+    "/etc/neutron/plugins/ml2/openvswitch_agent.ini"
+    "/etc/neutron/l3_agent.ini"
+    "/etc/neutron/dhcp_agent.ini"
+    "/etc/neutron/metadata_agent.ini"
+    "/etc/nova/nova.conf"
+)
+
+for config in "${config_files[@]}"; do
+    if [ -f "${config}.bak" ]; then
+        mv -f "${config}.bak" "$config"
+        echo "Restored original configuration: $config"
+    else
+        echo "No backup found for $config, skipping..."
+    fi
+done
+
+# Drop the Neutron database
+echo "Dropping Neutron database..."
+mysql -e "DROP DATABASE IF EXISTS neutron;"
+mysql -e "DROP USER IF EXISTS 'neutron'@'localhost';"
+mysql -e "DROP USER IF EXISTS 'neutron'@'%';"
+
+# Remove OpenStack Neutron user and endpoints
+echo "Removing Neutron user and endpoints from OpenStack..."
+srcopenrc
+openstack user delete neutron
+openstack service delete network
+openstack endpoint list | awk '/9696/ {print $2}' | xargs -I {} openstack endpoint delete {}
+
+# Remove firewall rules
+echo "Removing firewall rule for Neutron..."
+firewall-cmd --remove-port=9696/tcp --permanent
+firewall-cmd --reload
+
+echo "### cleanup Controller completed successfully ###"
+}
+
+clean_controller_compute()
+{
+echo "cleaning up  Neutron Compute Node…"
+
+# Stop and disable Neutron service
+echo "Stopping and disabling Neutron Open vSwitch agent..."
+systemctl stop neutron-openvswitch-agent.service
+systemctl disable neutron-openvswitch-agent.service
+
+# Remove Neutron package
+echo "Removing Neutron Open vSwitch package..."
+dnf remove -y openstack-neutron-openvswitch
+
+# Restore original configuration files if backups exist
+orig="/etc/neutron/neutron.conf"
+restore_config
+orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
+restore_config
+orig="/etc/nova/nova.conf"
+restore_config
+
+# Restart Nova Compute service
+echo "restarting services..."
+systemctl restart openstack-nova-compute.service
+
+echo "### cleanup Compute Node completed successfully ###"
+
+}
+
+clean_neutron_block_nod()
+{
+
+# stop neutron services if running
+echo "stopping neutron services..."
+systemctl stop neutron-server.service neutron-dhcp-agent.service neutron-metadata-agent.service neutron-l3-agent.service 2>/dev/null
+
+# remove neutron database
+echo "removing neutron database..."
+mysql -e "DROP DATABASE IF EXISTS neutron;"
+mysql -e "DELETE FROM mysql.db WHERE Db='neutron';"
+mysql -e "DELETE FROM mysql.user WHERE User='neutron';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# remove neutron user from openstack
+echo "removing neutron user from openstack..."
+srcopenrc
+openstack user delete neutron 2>/dev/null
+
+# restore original configuration files if backups exist
+orig="/etc/neutron/neutron.conf"
+)
+
+for config in "${config_files[@]}"; do
+    if [ -f "${config}.bak" ]; then
+        mv -f "${config}.bak" "$config"
+        echo "restored original configuration: $config"
+    else
+        echo "no backup found for $config, skipping..."
+    fi
+done
+
+echo "### undo script for neutron block storage node completed successfully ###"
+	
+}

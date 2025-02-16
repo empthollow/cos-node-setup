@@ -5,17 +5,18 @@
 set -o errexit  
 # Catch errors in pipelines
 set -o pipefail 
+# make traps work inside functions
+set -E
 
 handle_error() {
 echo "======================================================================="
 echo "$stage installation or execution error on ${BASH_LINENO[0]}, goodbye"
 echo "======================================================================="
-#sed -i /resume/s/0/1/ resume_status
 exit 1
 }
 
 # Trap errors and call the error handler
-trap 'handle_error $LINENO' ERR EXIT HUP INT QUIT TERM PIPE
+trap 'handle_error $LINENO' ERR HUP INT QUIT TERM PIPE
 
 [ "$(id -u)" -ne "0" ] && echo "you are not root: use 'sudo -s'" && exit
 
@@ -201,6 +202,25 @@ fi
 
 }
 
+save_config()
+{
+if [ -e "$orig" ]; then
+	cp $orig ${orig}.BAK 
+else
+	echo "$orig does not exist, skipping backup..."
+fi
+}
+
+restore_config()
+{
+if [ -e "${orig}.BAK" ]; then
+	cp ${orig}.BAK $orig
+	echo "restored previous $orig configuration..."
+else
+	echo "$orig does not exist, skipping restore..."
+fi
+}
+
 base_all() {
 # install base node packages
 stage=base
@@ -221,6 +241,8 @@ echo "### base install complete ###"
 components_controller()
 {
 dnf install -y chrony
+orig="/etc/chrony.conf"
+save_config
 sed -i "/^#allow/a allow $mgmtsubnet" /etc/chrony.conf
 systemctl enable chronyd.service
 systemctl start chronyd.service
@@ -231,6 +253,8 @@ echo "### components controller install complete ###"
 components_node()
 {
 dnf install -y chrony
+orig=/etc/chrony.conf
+save_config
 sed -i 's/^pool/#pool/' /etc/chrony.conf
 sed -i "/^#pool/a server\ controller\ iburst" /etc/chrony.conf
 systemctl enable chronyd.service
@@ -247,9 +271,10 @@ echo "             installing mariadb      "
 echo "==============================================="
 echo "installing mariadb packages..."
 dnf install -y mariadb mariadb-server python3-PyMySQL 
-[ -e "/etc/my.cnf.d/openstack.cnf" ] && $(mv /etc/my.cnf.d/openstack.cnf /etc/my.cnf.d/openstack.bak)
 
 echo "writing mariadb config..."
+orig="/etc/my.cnf.d/openstack.cnf"
+save_config
 echo "[mysqld]
 bind-address = $controllerip
 
@@ -298,6 +323,8 @@ echo "installing memcached packages..."
 dnf install -y memcached python3-memcached
 
 echo "writing memcached config..."
+orig="/etc/sysconfig/memcached"
+save_config
 sed -i s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
 firewall-cmd --add-port=11211/tcp --permanent
 firewall-cmd --reload
@@ -306,6 +333,7 @@ firewall-cmd --reload
 echo "starting service..."
 systemctl enable --now memcached.service
 sed -i /memcachedstat/s/1/0/ resume_status
+
 echo "### memcached install complete ###"
 }
 
@@ -320,6 +348,8 @@ echo "installing etcd packages"
 dnf install -y etcd
 
 echo "writing etcd config..."
+orig="/etc/etcd/etcd.conf"
+save_config
 sed -i 's/^[^#]/#/' /etc/etcd/etcd.conf
 [ -z "$controllerip" ] && echo -n "Enter controller ip" && read controllerip
 echo "#[Member]
@@ -360,6 +390,8 @@ echo "installing keystone packages..."
 dnf install -y openstack-keystone httpd mod_wsgi
 
 echo "writing keystone config..."
+orig="/etc/keystone/keystone.conf"
+save_config
 sed -i "/\[database\]/a connection = mysql+pymysql://keystone:$KEYSTONE_DBPASS@controller/keystone" /etc/keystone/keystone.conf
 sed -i '/\^[token\]/a provider = fernet' /etc/keystone/keystone.conf
 su -s /bin/sh -c "keystone-manage db_sync" keystone
@@ -370,6 +402,8 @@ keystone-manage bootstrap --bootstrap-password $ADMIN_PASS \
   --bootstrap-internal-url http://controller:5000/v3/ \
   --bootstrap-public-url http://controller:5000/v3/ \
   --bootstrap-region-id RegionOne
+orig="/etc/httpd/conf/httpd.conf"
+save_config
 sed -i '/\#ServerName/a ServerName controller' /etc/httpd/conf/httpd.conf
 ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/
 firewall-cmd --add-port=5000/tcp --permanent
@@ -424,6 +458,8 @@ echo "installing glance packages"
 dnf install -y openstack-glance
 
 echo "writing glance config..." 
+orig="/etc/glance/glance-api.conf" 
+save_config
 sed -i "/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance" /etc/glance/glance-api.conf 
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS" /etc/glance/glance-api.conf
 sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
@@ -467,9 +503,11 @@ openstack endpoint create --region RegionOne placement admin http://controller:8
 dnf install -y openstack-placement-api python3-osc-placement
 
 echo "writing placment config ..."
+orig="/etc/placement/placement.conf"
 sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
 sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
+orig="/etc/httpd/conf.d/00-placement-api.conf"
 sed -i '/^<Virtual/a \ \ <Directory /usr/bin>\n\tRequire all granted \n\ \ </Directory>' /etc/httpd/conf.d/00-placement-api.conf
 firewall-cmd --add-port=8778/tcp --permanent
 firewall-cmd --reload
@@ -582,6 +620,8 @@ dnf install -y openstack-nova-compute libvirt-daemon
 # write configs
 echo "writing nova config..."
 chown -R nova:nova /usr/lib/python3.9/site-packages/
+orig="/etc/nova/nova.conf"
+save_config
 sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nmy_ip = $controllerip\ncompute_driver = libvirt.LibvirtDriver"  /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
@@ -593,7 +633,6 @@ sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default
 
 # finalize installation
 
-echo "writing nova config..."
 if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" ]; then
 	echo "================================================================================================="
 	echo "            this machine supports hardware acceleration\nnova configuration complete"
@@ -686,6 +725,8 @@ echo "installing cinder packages..."
 dnf install -y openstack-cinder targetcli
 
 echo "writing cinder config..."
+orig=/etc/lvm/lvm.conf
+save_config
 sed -i "/^\[DEFAULT\]/a my_ip = $cinderctrlip\nenabled_backends = lvm\nglance_api_servers = http://controller:9292\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone" /etc/lvm/lvm.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/lvm/lvm.conf
 sed -i "/^\[lvm\]/a \nvolume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver\nvolume_group = cinder-volumes\ntarget_protocol = iscsi\ntarget_helper = lioadm" /etc/lvm/lvm.conf
@@ -701,7 +742,7 @@ sed -i /cindernodestat/s/1/0/ resume_status
 echo "### cinder install complete ###"
 }
 
-cinderbackup_node()
+cinder_backup_node()
 {
 stage="cinder for backup node ***swift required***"
 echo "==============================================="
@@ -864,17 +905,23 @@ echo "==============================================="
 dnf install -y openstack-neutron-openvswitch
 
 # configure neutron.conf
+echo "writing neutron configs..."
+orig="/etc/neutron/neutron.conf"
+save_config
 sed -i "/^\[DEFAULT\]/a transport_url \= rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy \= keystone" /etc/neutron/neutron.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
 sed -i "/^\[[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/neutron.conf
 
 # Configure the Open vSwitch agent¶
+orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
+save_config
 sed -i "/^\ovs[\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 sed -i "/^\[vxlan\]/a local_ip = $overlayip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
-sed -i "/^\[securitygroup\]/a " /etc/neutron/plugins/ml2/openvswitch_agent.ini
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 
 # configure compute to use networking
+orig="/etc/nova/nova.conf"
+save_config
 sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/nova/nova.conf
 
 # start / restart services
@@ -1120,7 +1167,7 @@ resumeclean=neutronstat
 # reset resume
 flush_resume
 echo "+++++++++++++++++++++++++++++++++++++++++++++++"
-echo "   compute node  archetype install complete "
+echo "   compute node archetype install complete "
 echo "+++++++++++++++++++++++++++++++++++++++++++++++"
 }
 
@@ -1282,23 +1329,39 @@ flush_resume()
 # reset resume file to zeros
 sed -i s/0/1/g resume_status
 sed -i /resume/s/1/0/ resume_status
-echo "Resume states reset for full installation" && sleep 1
+echo "### Resume states reset ###" && sleep 1
 }
 
 clean_resume()
 {
 # fix variable to work
 case $resumeclea in
-	basestat		) clean_base_all ;;
-	mariadbstat		) clean_etcd_controller ;;
+	componenetstat		) 
+		orig="/etc/chrony.conf"
+		restore_config
+		;;
+	mariadbstat		) 
+		orig="/etc/my.cnf.d/openstack.cnf"
+	       	restore_config
+		;;
 	rabbitmqstat		) clean_mariadb_controller ;;
 	memcachedstat		) clean_rabbitmq_controller ;;
 	etcdstat		) clean_memcached_controller ;;
 	keystonestat		) clean_keystone_controller ;;
 	glancestat		) clean_glance_controller ;;
 	placementstat		) clean_placement_controller ;;
-	novastat		) clean_nova_controller ;;
-	novastat		) ;;
+	novastat		) 
+		orig="/etc/nova/nova.conf"
+		restore_config
+		;;
+	neutronstat		) 
+		orig="/etc/neutron/neutron.conf"
+		restore_config
+		orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
+		restore_config
+		orig="/etc/nova/nova.conf"
+		restore_config
+		;;
 	cinderstat		) clean_cinder_controller ;;
 	cindernodestat		) ;;
 	cinderbackupstat	) ;;
