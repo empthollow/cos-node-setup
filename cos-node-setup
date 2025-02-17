@@ -8,7 +8,59 @@ set -o pipefail
 # make traps work inside functions
 set -E
 
+clean_resume()
+{
+# fix variable to work
+echo "cleaning up..."
+case $resumeclean in
+	componenetstat		) 
+		if [ "$archetype" = "controller" ]; then
+			clean_compnents_controller
+		else
+			clean_components_node
+		fi	
+		;;
+	mariadbstat		) 
+		clear_mariadb_controller
+		;;
+	rabbitmqstat		) clean_rabbitmq_controller ;;
+	memcachedstat		) clean_memcached_controller ;;
+	etcdstat		) clean_etcd_controller ;;
+	keystonestat		) clean_keystone_controller ;;
+	glancestat		) clean_glance_controller ;;
+	placementstat		) clean_placement_controller ;;
+	novastat		) 
+		if [ "$archetype" = "controller" ]; then
+			clean_nova_controller
+		else
+			clean_nova_node
+		fi
+		;;
+	neutronstat		) 
+		if [ "$archetype" = "controller" ]; then
+			clean_neutron_controller
+		else
+			clean_neutron_compute_node
+		fi
+		;;
+	cinderstat		) 
+		if [ "$archetype" = "controller" ]; then
+			clean_cinder_controller
+		elif [ "$archetype" = "cinderbackupnode" ]; then
+			clean_cinder_backup_node
+		else
+			clean_cinder_node
+		fi
+		;;
+	horizonstat		) clean_horizon ;;
+
+esac
+}
+
 handle_error() {
+if [ -z "$resumeclean" ]; then
+	clean_resume
+fi
 echo "======================================================================="
 echo "$stage installation or execution error on ${BASH_LINENO[0]}, goodbye"
 echo "======================================================================="
@@ -1307,54 +1359,7 @@ sed -i /resume/s/1/0/ resume_status
 echo "### Resume states reset ###" && sleep 1
 }
 
-clean_resume()
-{
-# fix variable to work
-echo "cleaning up..."
-case $resumeclean in
-	componenetstat		) 
-		if [ "$archetype" = "controller" ]; then
-			clean_compnents_controller
-		else
-			clean_components_node
-		fi	
-		;;
-	mariadbstat		) 
-		clear_mariadb_controller
-		;;
-	rabbitmqstat		) clean_rabbitmq_controller ;;
-	memcachedstat		) clean_memcached_controller ;;
-	etcdstat		) clean_etcd_controller ;;
-	keystonestat		) clean_keystone_controller ;;
-	glancestat		) clean_glance_controller ;;
-	placementstat		) clean_placement_controller ;;
-	novastat		) 
-		if [ "$archetype" = "controller" ]; then
-			clean_nova_controller
-		else
-			clean_nova_node
-		fi
-		;;
-	neutronstat		) 
-		if [ "$archetype" = "controller" ]; then
-			clean_neutron_controller
-		else
-			clean_neutron_compute_node
-		fi
-		;;
-	cinderstat		) 
-		if [ "$archetype" = "controller" ]; then
-			clean_cinder_controller
-		elif [ "$archetype" = "cinderbackupnode" ]; then
-			clean_cinder_backup_node
-		else
-			clean_cinder_node
-		fi
-		;;
-	horizonstat		) clean_horizon ;;
 
-esac
-}
 
 confirmvars()
 {
