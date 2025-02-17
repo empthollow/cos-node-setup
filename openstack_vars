@@ -1,5 +1,5 @@
 release=bobcat
-node="computenode"
+archetype="computenode"
 controllerip=172.22.3.21
 computeip=172.22.3.22
 blockstoreip=172.22.3.23
