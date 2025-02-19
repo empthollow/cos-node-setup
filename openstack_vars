@@ -8,7 +8,7 @@ myuser=stacked
 
 # cinder
 # cinder storage device
-cinderdev=/dev/sdb3
+cinderdev=/dev/vdb
 # cinder controller ip
 cinderctrlip=$controllerip
 

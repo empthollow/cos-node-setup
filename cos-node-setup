@@ -766,7 +766,11 @@ echo "   installing cinder for block storage node"
 echo "==============================================="
 
 # test for volume
-[[ "$cinderdev" -ne "$(fdisk -l | sed -n '/^Device/,/^Disk/{ /^\/dev/p }' | grep -Eo '\/[a-z]{3}\/([a-z]{1,4}[0-9]{1,2})' | grep $cinderdev)" ]] && echo "$cinderdev is not present"
+if [[ "$cinderdev" != "$(fdisk -l | sed -n '/^Device/,/^Disk/{ /^\/dev/p }' | grep -Eo '\/[a-z]{3}\/([a-z]{1,4}[0-9]{1,2})' | grep $cinderdev)" ]]; then
+       echo "$cinderdev is not present"
+       exit 1
+fi
+
 echo "creating storage volume..."
 pvcreate /dev/$cinderdev
 vgcreate cinder-volumes /dev/$cinderdev
@@ -1211,8 +1215,6 @@ resumeclean=componentstat
 [ "$resume" == 1 ] && [ "$componentstat" == "0" ] && echo "components complete" || components_node
 resumeclean=cinderstat
 [ "$resume" == 1 ] && [ "$cinderstat" == "0" ] && echo "cinder complete" || cinder_node
-resumeclean=neutronstat
-[ "$resume" == 1 ] && [ "$neutronstat" == "0" ] && echo "neutron complete" || neutron_block_node
 # reset resume
 flush_resume
 echo "+++++++++++++++++++++++++++++++++++++++++++++++"
