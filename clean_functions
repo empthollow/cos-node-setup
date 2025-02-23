@@ -55,8 +55,6 @@ restore_config
 echo "removing packages..."
 dnf remove -y mariadb mariadb-server python3-PyMySQL
 
-fi
-
 echo "### cleanup completed ###"
 }
 
@@ -385,7 +383,7 @@ echo "### cleanup completed ###"
 
 clean_cinder_backupnode()
 {
-
+echo "place holder"
 }
 
 clean_horizon()
