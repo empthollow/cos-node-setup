@@ -355,6 +355,7 @@ echo "starting service..."
 systemctl enable --now rabbitmq-server
 
 echo "setting permissions..."
+echo "adding firewall rules..."
 firewall-cmd --add-port=5672/tcp --permanent
 firewall-cmd --reload
 rabbitmqctl add_user openstack $RABBIT_PASS
@@ -378,6 +379,7 @@ echo "writing memcached config..."
 orig="/etc/sysconfig/memcached"
 save_config
 sed -i s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
+echo "adding firewall rules..."
 firewall-cmd --add-port=11211/tcp --permanent
 firewall-cmd --reload
 
@@ -415,7 +417,9 @@ ETCD_ADVERTISE_CLIENT_URLS=\"http://$controllerip:2379\"
 ETCD_INITIAL_CLUSTER=\"controller=http://$controllerip:2380\"
 ETCD_INITIAL_CLUSTER_TOKEN=\"etcd-cluster-01\"
 ETCD_INITIAL_CLUSTER_STATE=\"new\"" >> /etc/etcd/etcd.conf
+echo "adding firewall rules..."
 firewall-cmd --add-port=2379/tcp --permanent
+echo "adding firewall rules..."
 firewall-cmd --add-port=2380/tcp --permanent
 firewall-cmd --reload
 
@@ -458,6 +462,7 @@ orig="/etc/httpd/conf/httpd.conf"
 save_config
 sed -i '/\#ServerName/a ServerName controller' /etc/httpd/conf/httpd.conf
 ln -s /usr/share/keystone/wsgi-keystone.conf /etc/httpd/conf.d/
+echo "adding firewall rules..."
 firewall-cmd --add-port=5000/tcp --permanent
 firewall-cmd --reload
 
@@ -519,6 +524,7 @@ sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.
 sed -i '/^\#default_backend/a default_backend = fs' /etc/glance/glance-api.conf
 sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images/@' /etc/glance/glance-api.conf
 sed -i "/^\[oslo_limit\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS"  /etc/glance/glance-api.conf
+echo "adding firewall rules..."
 firewall-cmd --add-port=9292/tcp --permanent
 firewall-cmd --reload
 
@@ -562,6 +568,7 @@ sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
 sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
 orig="/etc/httpd/conf.d/00-placement-api.conf"
 sed -i '/^<Virtual/a \ \ <Directory /usr/bin>\n\tRequire all granted \n\ \ </Directory>' /etc/httpd/conf.d/00-placement-api.conf
+echo "adding firewall rules..."
 firewall-cmd --add-port=8778/tcp --permanent
 firewall-cmd --reload
 
@@ -628,6 +635,7 @@ sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = http://controller:5000/v3\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
+echo "adding firewall rules..."
 firewall-cmd --add-port=8774/tcp --permanent
 firewall-cmd --reload
 
@@ -737,12 +745,19 @@ echo "installing cinder packages..."
 dnf install -y openstack-cinder
 
 echo "writing cinder config..."
+# /etc/cinder/cinder.conf
+orig="/etc/cinder/cinder.conf"
+save_config
 sed -i "/^\[DEFAULT\]/a transport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone\nmy_ip = $controllerip" /etc/cinder/cinder.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
+sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/cinder/cinder.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
+# /etc/nova/nova.conf
+orig="/etc/nova/nova.conf"
+save_config
 sed -i "/^\[cinder\]/a os_region_name = RegionOne" /etc/nova/nova.conf
-sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/nova/nova.conf
 
+echo "adding firewall rules..."
 echo "adding firewall rules..."
 firewall-cmd --add-port=8776/tcp --permanent
 firewall-cmd --reload
@@ -876,8 +891,15 @@ sed -i "/WSGIScriptAlias/s/wsgi\/django.wsgi/wsgi.py/" /etc/httpd/conf.d/opensta
 sed -i "/<Directory \/usr\/share\/openstack-dashboard\/openstack_dashboard\/wsgi>/i <VirtualHost *:80>" /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/<Directory \/usr\/share\/openstack-dashboard\/openstack_dashboard\/wsgi>/s/\/wsgi//" /etc/httpd/conf.d/openstack-dashboard.conf
 echo "</VirtualHost>" >> /etc/httpd/conf.d/openstack-dashboard.conf
+# /etc/httpd/conf/httpd.conf
+orig="/etc/httpd/conf/httpd.conf"
+save_config
+sed -i '/Listen\ 80/s/^/#\ /' /etc/httpd/conf/httpd.conf
+
+echo "adding firewall rules..."
 firewall-cmd --add-service=http --permanent
 firewall-cmd --reload
+
 
 echo "restarting services..."
 systemctl restart httpd.service memcached.service
@@ -946,6 +968,7 @@ ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
 
 echo "populating database..."
 /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
+echo "adding firewall rules..."
 firewall-cmd --add-port=9696/tcp --permanent
 firewall-cmd --reload
 
@@ -1039,6 +1062,7 @@ sed -i -e '/egg:swift#keystoneauth/{s/^#\ //' -e 'a operator_roles = admin,user}
 sed -i -e '/\[filter:authtoken\]/s/^#\ //' /etc/swift/proxy-server.conf
 sed -i -e "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware.auth_token:filter_factory\nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_id = default\nuser_domain_id = default\nproject_name = service\nusername = swift\npassword = $SWIFT_PASS\n delay_auth_decision = True" /etc/swift/proxy-server.conf
 sed -i -e '/^\[filter:cache\]/,/^\[/{/egg:swift#memcache/a memcache_servers = controller:11211}' /etc/swift/proxy-server.conf
+echo "adding firewall rules..."
 firewall-cmd --add-port=8080/tcp --permanent
 firewall-cmd --reload
 
