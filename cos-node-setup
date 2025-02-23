@@ -888,6 +888,7 @@ sed -i '1s|^|Listen 80\n|' /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/WSGIProcessGroup\ dashboard/aWSGIApplicationGroup\ %{GLOBAL}" /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/WSGIScriptAlias/s/dashboard//" /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/WSGIScriptAlias/s/wsgi\/django.wsgi/wsgi.py/" /etc/httpd/conf.d/openstack-dashboard.conf
+sed -i '/^Alias/s/\/dashboard//' /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/<Directory \/usr\/share\/openstack-dashboard\/openstack_dashboard\/wsgi>/i <VirtualHost *:80>" /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/<Directory \/usr\/share\/openstack-dashboard\/openstack_dashboard\/wsgi>/s/\/wsgi//" /etc/httpd/conf.d/openstack-dashboard.conf
 echo "</VirtualHost>" >> /etc/httpd/conf.d/openstack-dashboard.conf
@@ -1453,6 +1454,7 @@ cd $dir
 [ -e "openstack_passwords" ] && . openstack_passwords || { echo "openstack_passwords does not exist"; }
 [ -e "openstack_vars" ] && . openstack_vars || { echo "openstack_vars does not exist" && exit 1; }
 [ -e "resume_status" ] && . resume_status || { echo "resume_status does not exist" && exit 1; }
+[ -e "clean_functions" ] && . clean_functions || { echo "clean_functions does not exist" && exit 1; }
 # startup checks
 if [ "$1" ==  "" ]; then
 	echo "Designed for CentOS"
