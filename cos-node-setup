@@ -514,6 +514,7 @@ orig="/etc/glance/glance-api.conf"
 save_config
 sed -i "/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance" /etc/glance/glance-api.conf 
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS" /etc/glance/glance-api.conf
+sed -i "/^\[paste_deploy\]/a flavor = keystone" /etc/glance/glance-api.conf 
 sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 sed -i '/^\#default_backend/a default_backend = fs' /etc/glance/glance-api.conf
 sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images/@' /etc/glance/glance-api.conf
@@ -524,7 +525,7 @@ firewall-cmd --reload
 # echo "configuring openstack..."
 
 echo "populating database..."
-su -s /bin/sh -c "glance-manage db_sync" glance
+/bin/sh -c "glance-manage db_sync" glance
 
 echo "starting service..."
 systemctl enable --now openstack-glance-api.service
@@ -740,13 +741,16 @@ sed -i "/^\[DEFAULT\]/a transport_url = rabbit://openstack:$RABBIT_PASS@controll
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
 sed -i "/^\[cinder\]/a os_region_name = RegionOne" /etc/nova/nova.conf
-# firewall-cmd --add-port=8776/tcp --permanent
-# firewall-cmd --reload
+sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/nova/nova.conf
+
+echo "adding firewall rules..."
+firewall-cmd --add-port=8776/tcp --permanent
+firewall-cmd --reload
 
 
 # populate database
 echo "populating database ..."
-su -s /bin/sh -c "cinder-manage db sync" cinder
+/bin/sh -c "cinder-manage db sync" cinder
 
 # start services
 echo "starting services..."
