@@ -458,6 +458,8 @@ keystone-manage bootstrap --bootstrap-password $ADMIN_PASS \
   --bootstrap-internal-url http://controller:5000/v3/ \
   --bootstrap-public-url http://controller:5000/v3/ \
   --bootstrap-region-id RegionOne
+
+# /etc/httpd/conf/httpd.conf
 orig="/etc/httpd/conf/httpd.conf"
 save_config
 sed -i '/\#ServerName/a ServerName controller' /etc/httpd/conf/httpd.conf
@@ -856,20 +858,24 @@ dnf install -y openstack-dashboard
 #read -p "press enter to continue"
 
 echo "writing horizon config..."
+
+# /etc/openstack-dashboard/local_settings
 orig=/etc/openstack-dashboard/local_settings
 save_config
-linemcd=$(awk '/^#CACHES/{ print NR }' /etc/openstack-dashboard/local_settings)
 #echo $linemcd
 #echo 1
 sed -i '/^#SESSION_ENGINE/s/^#//' /etc/openstack-dashboard/local_settings
+sed -i '/^SESSION_ENGINE/s/signed_cookeis/cache/' /etc/openstack-dashboard/local_settings
 #echo 2
+linemcd=$(awk '/^#CACHES/{ print NR }' /etc/openstack-dashboard/local_settings)
 sed -i "$linemcd,$(awk -v line="$linemcd" 'BEGIN {print line + 5}')s/^#//" /etc/openstack-dashboard/local_settings
 sed -i "$linemcd,/}/s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
 #echo 3
 sed -i '/^OPENSTACK_KEYSTONE_URL/s/%s/%s:5000/' /etc/openstack-dashboard/local_settings
+sed -i '/^OPENSTACK_KEYSTONE_URL/s/\/identity//' /etc/openstack-dashboard/local_settings
 sed -i "$(awk '/^OPENSTACK_HOST/{ print NR }' /etc/openstack-dashboard/local_settings)s/127.0.0.1/controller/" /etc/openstack-dashboard/local_settings
 #echo 4
-sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
+#sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/local_settings)a OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True" /etc/openstack-dashboard/local_settings
 #echo 5
 IFS=","
 hzcleanedhosts=$(for x in "$hzallowedhosts"; do echo -n "'$x', "; done)
@@ -881,6 +887,7 @@ sed -i "$(awk '/^OPENSTACK_KEYSTONE_URL/{ print NR }' /etc/openstack-dashboard/l
 echo "WEBROOT = \"/\"" >> /etc/openstack-dashboard/local_settings
 #sed -i "$(awk '/^TIME_ZONE/{ print NR }' /etc/openstack-dashboard/local_settings)s/"UTC"/$srvtz/" /etc/openstack-dashboard/local_settings
 #echo 9
+
 # openstack-dashboard.conf file
 orig=/etc/httpd/conf.d/openstack-dashboard.conf
 save_config
@@ -892,6 +899,7 @@ sed -i '/^Alias/s/\/dashboard//' /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/<Directory \/usr\/share\/openstack-dashboard\/openstack_dashboard\/wsgi>/i <VirtualHost *:80>" /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/<Directory \/usr\/share\/openstack-dashboard\/openstack_dashboard\/wsgi>/s/\/wsgi//" /etc/httpd/conf.d/openstack-dashboard.conf
 echo "</VirtualHost>" >> /etc/httpd/conf.d/openstack-dashboard.conf
+
 # /etc/httpd/conf/httpd.conf
 orig="/etc/httpd/conf/httpd.conf"
 save_config
@@ -950,12 +958,15 @@ sed -i "/^\[ml2\]/a type_drivers = flat,vlan,vxlan\ntenant_network_types = vxlan
 \nmechanism_drivers = openvswitch,l2population\nextension_drivers = port_security" /etc/neutron/plugins/ml2/ml2_conf.ini
 sed -i "/^\[ml2_type_flat\]/a flat_networks = provider" /etc/neutron/plugins/ml2/ml2_conf.ini
 sed -i "/^\[ml2_type_vxlan\]/a vni_ranges = 1:1000" /etc/neutron/plugins/ml2/ml2_conf.ini
+
 # Configure the Open vSwitch agent¶
-sed -i "/^\ovs[\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
+sed -i "/^\[ovs[\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 sed -i "/^\[vxlan\]/a local_ip = $overlayrip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
+echo "[vxlan]\nlocal_ip = $overlayrip\nl2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 # Configure the layer-3 agent¶
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch" /etc/neutron/l3_agent.ini
+
 # Configure the DHCP agent¶
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch\ndhcp_driver = neutron.agent.linux.dhcp.Dnsmasq\nenable_isolated_metadata = true" /etc/neutron/dhcp_agent.ini
 
