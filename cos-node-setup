@@ -270,6 +270,14 @@ if [ -e "${orig}.BAK" ]; then
 	echo "restored previous $orig configuration..."
 else
 	echo "$orig does not exist, skipping restore..."
+	read -t 5 -p  "delete $orig ? [y/n] > " delfile || delfile="n"
+	if [ "$delfile" == "y" ]; then
+		rm -f $orig
+		echo "$orig deleted"
+	else
+		delfile="n"
+		echo "no changes made to $orig"
+	fi
 fi
 }
 
@@ -305,7 +313,7 @@ echo "### components controller install complete ###"
 components_node()
 {
 dnf install -y chrony
-orig=/etc/chrony.conf
+orig="/etc/chrony.conf"
 save_config
 sed -i 's/^pool/#pool/' /etc/chrony.conf
 sed -i "/^#pool/a server\ controller\ iburst" /etc/chrony.conf
@@ -355,11 +363,11 @@ echo "starting service..."
 systemctl enable --now rabbitmq-server
 
 echo "setting permissions..."
+rabbitmqctl add_user openstack $RABBIT_PASS
+rabbitmqctl set_permissions openstack ".*" ".*" ".*"
 echo "adding firewall rules..."
 firewall-cmd --add-port=5672/tcp --permanent
 firewall-cmd --reload
-rabbitmqctl add_user openstack $RABBIT_PASS
-rabbitmqctl set_permissions openstack ".*" ".*" ".*"
 sed -i /rabbitmqstat/s/1/0/ resume_status
 echo "### rabbit mq install complete ###"
 }
@@ -626,6 +634,8 @@ echo "installing nova packages..."
 dnf install -y openstack-nova-api openstack-nova-conductor  openstack-nova-novncproxy openstack-nova-scheduler
 
 echo "writing nova configuration..."
+orig="/etc/nova/nova.conf"
+save_config
 sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672/\nmy_ip = $controllerip"  /etc/nova/nova.conf
 sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api" /etc/nova/nova.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova" /etc/nova/nova.conf
@@ -668,7 +678,7 @@ openstack-nova-novncproxy.service
 sed -i /novastat/s/1/0/ resume_status
 echo "### nova install compelete ###"
 }
-### Firewall rules
+
 nova_compute_node()
 {
 # install nova
@@ -701,7 +711,7 @@ if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" ]; then
 	echo "            this machine supports hardware acceleration\nnova configuration complete"
 	echo "================================================================================================="
 else
-	sed -i "/^\[libvirt\]/a qemu"
+	sed -i "/^\[libvirt\]/a qemu" /etc/nova/nova.conf
 	echo "================================================================================================="
 	echo "  this machine does not support hardware acceleration\nusing quemu\nova configuration complete"
 	echo "================================================================================================="
@@ -795,6 +805,8 @@ fi
 echo "creating storage volume..."
 pvcreate /dev/$cinderdev
 vgcreate cinder-volumes /dev/$cinderdev
+orig="/etc/lvm/lvm.conf"
+save_config
 sed -i "/^devices/a filter = [ \"a/$cinderdev/\", \"r/.*/\"" /etc/lvm/lvm.conf
 
 # install and configure
@@ -802,8 +814,6 @@ echo "installing cinder packages..."
 dnf install -y openstack-cinder targetcli
 
 echo "writing cinder config..."
-orig=/etc/lvm/lvm.conf
-save_config
 sed -i "/^\[DEFAULT\]/a my_ip = $cinderctrlip\nenabled_backends = lvm\nglance_api_servers = http://controller:9292\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone" /etc/lvm/lvm.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/lvm/lvm.conf
 sed -i "/^\[lvm\]/a \nvolume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver\nvolume_group = cinder-volumes\ntarget_protocol = iscsi\ntarget_helper = lioadm" /etc/lvm/lvm.conf
@@ -860,7 +870,7 @@ dnf install -y openstack-dashboard
 echo "writing horizon config..."
 
 # /etc/openstack-dashboard/local_settings
-orig=/etc/openstack-dashboard/local_settings
+orig="/etc/openstack-dashboard/local_settings"
 save_config
 #echo $linemcd
 #echo 1
@@ -889,7 +899,7 @@ echo "WEBROOT = \"/\"" >> /etc/openstack-dashboard/local_settings
 #echo 9
 
 # openstack-dashboard.conf file
-orig=/etc/httpd/conf.d/openstack-dashboard.conf
+orig="/etc/httpd/conf.d/openstack-dashboard.conf"
 save_config
 sed -i '1s|^|Listen 80\n|' /etc/httpd/conf.d/openstack-dashboard.conf
 sed -i "/WSGIProcessGroup\ dashboard/aWSGIApplicationGroup\ %{GLOBAL}" /etc/httpd/conf.d/openstack-dashboard.conf
@@ -946,6 +956,8 @@ echo "installing neutron packages..."
 dnf install -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvswitch ebtables
 
 # config neutron.conf
+orig="/etc/neutron/neutron.conf"
+save_config
 echo "writing neutron config..."
 sed -i "/^\[database\]/a connection = mysql+pymysql://neutron:$NEUTRON_DBPASS@controller/neutron" /etc/neutron/neutron.conf
 sed -i "/^\[DEFAULT\]/a core_plugin \= ml2\nservice_plugins \= router\ntransport_url \= rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy \= keystone\nnotify_nova_on_port_status_changes \= true\nnotify_nova_on_port_data_changes \= true" /etc/neutron/neutron.conf
@@ -954,26 +966,38 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/
 sed -i "/^\[nova\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/neutron/neutron.conf
 
 # Configure the Modular Layer 2 (ML2) plug-in
+orig="/etc/neutron/plugins/ml2/ml2_conf.ini"
+save_config
 sed -i "/^\[ml2\]/a type_drivers = flat,vlan,vxlan\ntenant_network_types = vxlan
 \nmechanism_drivers = openvswitch,l2population\nextension_drivers = port_security" /etc/neutron/plugins/ml2/ml2_conf.ini
 sed -i "/^\[ml2_type_flat\]/a flat_networks = provider" /etc/neutron/plugins/ml2/ml2_conf.ini
 sed -i "/^\[ml2_type_vxlan\]/a vni_ranges = 1:1000" /etc/neutron/plugins/ml2/ml2_conf.ini
 
 # Configure the Open vSwitch agent¶
+orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
 sed -i "/^\[ovs[\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 sed -i "/^\[vxlan\]/a local_ip = $overlayrip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 echo "[vxlan]\nlocal_ip = $overlayrip\nl2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
+
 # Configure the layer-3 agent¶
+orig="/etc/neutron/l3_agent.ini"
+save_config
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch" /etc/neutron/l3_agent.ini
 
 # Configure the DHCP agent¶
+orig="/etc/neutron/dhcp_agent.ini"
+save_config
 sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch\ndhcp_driver = neutron.agent.linux.dhcp.Dnsmasq\nenable_isolated_metadata = true" /etc/neutron/dhcp_agent.ini
 
 # metadata_agent.ini
+orig="/etc/neutron/metadata_agent.ini"
+save_config
 sed -i "/^\[DEFAULT\]/a nova_metadata_host = controller \nmetadata_proxy_shared_secret = METADATA_SECRET" /etc/neutron/metadata_agent.ini
 
 # nova.conf
+orig="/etc/nova/nova.conf"
+save_config
 sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS\nservice_metadata_proxy = true\nmetadata_proxy_shared_secret = METADATA_SECRET" /etc/nova/nova.conf
 
 ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
@@ -1065,6 +1089,8 @@ curl -o /etc/swift/proxy-server.conf https://opendev.org/openstack/swift/raw/bra
 
 # setup config files
 echo "writing swift config..."
+orig="/etc/swift/proxy-server.conf"
+save_config
 sed -i '/^\[DEFAULT\]/,/^\[/{/^[^#|\[]/s/^/#\ /g}' /etc/swift/proxy-server.conf
 sed -i "/^\[DEFAULT\]/a bind_port = 8080\nuser = swift\nswift_dir = /etc/swift" /etc/swift/proxy-server.conf
 sed -i '/^\[pipeline:main\]/,/^\[/{/^[^#|\[]/s/tempurl/authtoken\ keystoneauth/; /^[^#|\[]/s/tempauth//}' /etc/swift/proxy-server.conf
@@ -1074,6 +1100,8 @@ sed -i -e '/egg:swift#keystoneauth/{s/^#\ //' -e 'a operator_roles = admin,user}
 sed -i -e '/\[filter:authtoken\]/s/^#\ //' /etc/swift/proxy-server.conf
 sed -i -e "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware.auth_token:filter_factory\nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_id = default\nuser_domain_id = default\nproject_name = service\nusername = swift\npassword = $SWIFT_PASS\n delay_auth_decision = True" /etc/swift/proxy-server.conf
 sed -i -e '/^\[filter:cache\]/,/^\[/{/egg:swift#memcache/a memcache_servers = controller:11211}' /etc/swift/proxy-server.conf
+
+# add firewall rules
 echo "adding firewall rules..."
 firewall-cmd --add-port=8080/tcp --permanent
 firewall-cmd --reload
@@ -1108,9 +1136,13 @@ mkdir -p /srv/node/store2
 echo "writing swift config..."
 sdev1uuid=$(blkid | grep $storagedev1 | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}')
 sdev2uuid=$(blkid | grep $storagedev2 | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}')
+orig="/etc/fstab"
+save_config
 echo "UUID="$sdev1uuid" /srv/node/store1 xfs noatime 0 2" >> /etc/fstab
 echo "UUID="$sdev2uuid" /srv/node/store2 xfs noatime 0 2" >> /etc/fstab
 
+orig="/etc/rsyncd.conf"
+save_config
 echo "uid = swift
 gid = swift
 log file = /var/log/rsyncd.log
