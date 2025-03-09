@@ -968,17 +968,18 @@ sed -i "/^\[nova\]/a auth_url = http://controller:5000\nauth_type = password\npr
 # Configure the Modular Layer 2 (ML2) plug-in
 orig="/etc/neutron/plugins/ml2/ml2_conf.ini"
 save_config
-sed -i "/^\[ml2\]/a type_drivers = flat,vlan,vxlan\ntenant_network_types = vxlan
-\nmechanism_drivers = openvswitch,l2population\nextension_drivers = port_security" /etc/neutron/plugins/ml2/ml2_conf.ini
+sed -i "/^\[ml2\]/a type_drivers = flat,vlan,vxlan\ntenant_network_types = vxlan\nmechanism_drivers = openvswitch,l2population\nextension_drivers = port_security" /etc/neutron/plugins/ml2/ml2_conf.ini
 sed -i "/^\[ml2_type_flat\]/a flat_networks = provider" /etc/neutron/plugins/ml2/ml2_conf.ini
 sed -i "/^\[ml2_type_vxlan\]/a vni_ranges = 1:1000" /etc/neutron/plugins/ml2/ml2_conf.ini
 
 # Configure the Open vSwitch agent¶
 orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
-sed -i "/^\[ovs[\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
-sed -i "/^\[vxlan\]/a local_ip = $overlayrip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
-echo "[vxlan]\nlocal_ip = $overlayrip\nl2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
+sed -i "/^\[ovs\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
+#sed -i "/^\[vxlan\]/a local_ip = $overlayrip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
+echo "[vxlan]
+local_ip = $overlayrip
+l2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 
 # Configure the layer-3 agent¶
 orig="/etc/neutron/l3_agent.ini"
@@ -1422,7 +1423,6 @@ if [ -e "openstack_passwords" ]; then
 	echo "========================================================================="
 	echo "NOTE: the openstack_passwords file exists and is automatically included"
 	echo "========================================================================="
-	echo "NOTE: the openstack_passwords file exists and is automatically included"
 else
 	echo "NOTE: the openstack_passwords file does not exist"
 	echo "Generating openstack_passwords file"
