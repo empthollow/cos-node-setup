@@ -797,10 +797,16 @@ echo "   installing cinder for block storage node"
 echo "==============================================="
 
 # test for volume
-if [[ "$cinderdev" != "$(fdisk -l | sed -n '/^Device/,/^Disk/{ /^\/dev/p }' | grep -Eo '\/[a-z]{3}\/([a-z]{1,4}[0-9]{1,2})' | grep $cinderdev)" ]]; then
-       echo "$cinderdev is not present"
-       exit 1
-fi
+for x in $(fdisk -l | sed -n '/^Device/,/^Disk/{ /^\/dev/p}' | grep -Eo '\/[a-z]{3}\/([a-z]{1,4})' | grep $cinderdev); do
+       if [[ "/dev/$cinderdev" = "$x" ]]; then
+                echo "/dev/$cinderdev found"
+                break
+       else
+                echo "'/dev/$cinderdev not found"
+                exit 1
+       fi
+done
+
 
 echo "creating storage volume..."
 pvcreate /dev/$cinderdev
