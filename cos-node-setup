@@ -640,8 +640,8 @@ sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = 
 sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api" /etc/nova/nova.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova" /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
-sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
-sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = http://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[vnc\]/a enabled = true\nserver_listen = $controllerip\nserver_proxyclient_address = $controllerip" /etc/nova/nova.conf
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
@@ -814,11 +814,14 @@ echo "installing cinder packages..."
 dnf install -y openstack-cinder targetcli
 
 echo "writing cinder config..."
-sed -i "/^\[DEFAULT\]/a my_ip = $cinderctrlip\nenabled_backends = lvm\nglance_api_servers = http://controller:9292\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone" /etc/lvm/lvm.conf
-sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/lvm/lvm.conf
-sed -i "/^\[lvm\]/a \nvolume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver\nvolume_group = cinder-volumes\ntarget_protocol = iscsi\ntarget_helper = lioadm" /etc/lvm/lvm.conf
-sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/lvm/lvm.conf
-sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/lvm/lvm.conf
+orig="/etc/cinder/cinder.conf"
+save_config
+sed -i "/^\[DEFAULT\]/a my_ip = $cinderctrlip\nenabled_backends = lvm\nglance_api_servers = http://controller:9292\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone" /etc/cinder/cinder.conf
+sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/cinder/cinder.conf
+sed -i "/^\[lvm\]/a \nvolume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver\nvolume_group = cinder-volumes\ntarget_protocol = iscsi\ntarget_helper = lioadm" /etc/cinder/cinder.conf
+sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
+sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
+
 
 # start and enable services
 echo "starting service..."
@@ -978,7 +981,7 @@ sed -i "/^\[ovs\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plug
 #sed -i "/^\[vxlan\]/a local_ip = $overlayrip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 echo "[vxlan]
-local_ip = $overlayrip
+local_ip = $overlayip
 l2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 
 # Configure the layer-3 agent¶
@@ -1376,6 +1379,7 @@ echo "             Current Variable Assignments           "
 echo "===================================================="
 echo ""
 awk 'BEGIN {FS="\="; printf "%20s%20s\n", "--Variable--", "--Value--"} /^[a-z]/{printf "%20s%25s\n", $1, $2}' openstack_vars 2>/dev/null | grep -v ^#
+	echo "$overlayip"
 echo "*****Time Zone Abbr: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones*****"
 echo -n "continue with current values? [y/n/x]: "
 read install

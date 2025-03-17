@@ -1,0 +1,6 @@
+#!/bin/bash
+openstack flavor create --ram 512 --disk 5 --vcpus 1 --public m1.tiny
+openstack flavor create --ram 2048 --disk 20 --vcpus 1 --public m1.small
+openstack flavor create --ram 4096 --disk 40 --vcpus 2 --public m1.medium
+openstack flavor create --ram 8192 --disk 80 --vcpus 4 --public m1.large
+openstack flavor create --ram 16384 --disk 160 --vcpus 8 --public m1.xlarge
