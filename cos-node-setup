@@ -824,7 +824,11 @@ orig="/etc/cinder/cinder.conf"
 save_config
 sed -i "/^\[DEFAULT\]/a my_ip = $cinderctrlip\nenabled_backends = lvm\nglance_api_servers = http://controller:9292\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone" /etc/cinder/cinder.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/cinder/cinder.conf
-sed -i "/^\[lvm\]/a \nvolume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver\nvolume_group = cinder-volumes\ntarget_protocol = iscsi\ntarget_helper = lioadm" /etc/cinder/cinder.conf
+echo "[lvm\] 
+volume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver
+volume_group = cinder-volumes
+target_protocol = iscsi
+target_helper = lioadm" >> /etc/cinder/cinder.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
 sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
 
