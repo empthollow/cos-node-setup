@@ -830,7 +830,7 @@ volume_group = cinder-volumes
 target_protocol = iscsi
 target_helper = lioadm" >> /etc/cinder/cinder.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
-sed -i "/^\[keystone_authtoken\]/a \nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
 
 
 # start and enable services
