@@ -797,7 +797,7 @@ echo "   installing cinder for block storage node"
 echo "==============================================="
 
 # test for volume
-for x in $(fdisk -l | sed -n '/^Device/,/^Disk/{ /^\/dev/p}' | grep -Eo '\/[a-z]{3}\/([a-z]{1,4})' | grep $cinderdev); do
+for x in $(fdisk -l | sed -n '{ /\/dev/p}' | grep -Eo '\/[a-z]{3}\/([a-z]{1,4})' | grep $cinderdev); do
        if [[ "/dev/$cinderdev" = "$x" ]]; then
                 echo "/dev/$cinderdev found"
                 break
@@ -813,7 +813,7 @@ pvcreate /dev/$cinderdev
 vgcreate cinder-volumes /dev/$cinderdev
 orig="/etc/lvm/lvm.conf"
 save_config
-sed -i "/^devices/a filter = [ \"a/$cinderdev/\", \"r/.*/\"" /etc/lvm/lvm.conf
+sed -i "/^devices/a filter = [ \"a/$cinderdev/\", \"r/.*/\" ]" /etc/lvm/lvm.conf
 
 # install and configure
 echo "installing cinder packages..."
