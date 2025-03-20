@@ -344,6 +344,10 @@ max_connections = 4096
 collation-server = utf8_general_ci
 character-set-server = utf8" > /etc/my.cnf.d/openstack.cnf
 
+echo "adding firewall rules..."
+firewall-cmd --add-port=3306/tcp --permanent
+firewall-cmd --reload
+
 echo "starting service..."
 systemctl enable --now mariadb.service
 sed -i /mariadbstat/s/1/0/ resume_status
@@ -641,7 +645,7 @@ sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@cont
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova" /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
-sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = http://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = http://controller:5000\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[vnc\]/a enabled = true\nserver_listen = $controllerip\nserver_proxyclient_address = $controllerip" /etc/nova/nova.conf
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
@@ -698,7 +702,7 @@ save_config
 sed -i "/^\[DEFAULT\]/a enabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nmy_ip = $controllerip\ncompute_driver = libvirt.LibvirtDriver"  /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
-sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller/identity\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller:5000\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[vnc\]/a enabled = true\nserver_listen = 0.0.0.0\nserver_proxyclient_address = $computeip\nnovncproxy_base_url = http://controller:6080/vnc_auto.html" /etc/nova/nova.conf
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
@@ -817,7 +821,7 @@ sed -i "/^devices/a filter = [ \"a/$cinderdev/\", \"r/.*/\" ]" /etc/lvm/lvm.conf
 
 # install and configure
 echo "installing cinder packages..."
-dnf install -y openstack-cinder targetcli
+dnf install -y openstack-cinder targetcli python3-PyMySQL
 
 echo "writing cinder config..."
 orig="/etc/cinder/cinder.conf"
@@ -985,10 +989,8 @@ sed -i "/^\[ml2\]/a type_drivers = flat,vlan,vxlan\ntenant_network_types = vxlan
 sed -i "/^\[ml2_type_flat\]/a flat_networks = provider" /etc/neutron/plugins/ml2/ml2_conf.ini
 sed -i "/^\[ml2_type_vxlan\]/a vni_ranges = 1:1000" /etc/neutron/plugins/ml2/ml2_conf.ini
 
-# Configure the Open vSwitch agent¶
-orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
+# Configure the ml2 Open vSwitch agent¶
 sed -i "/^\[ovs\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
-#sed -i "/^\[vxlan\]/a local_ip = $overlayrip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 echo "[vxlan]
 local_ip = $overlayip
@@ -1060,9 +1062,11 @@ sed -i "/^\[[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron
 # Configure the Open vSwitch agent¶
 orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
 save_config
-sed -i "/^\ovs[\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
-sed -i "/^\[vxlan\]/a local_ip = $overlayip\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
+sed -i "/^\[ovs\]/a bridge_mappings = provider:$provideriface" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
+echo "[vxlan]
+local_ip = $overlayip
+l2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 
 # configure compute to use networking
 orig="/etc/nova/nova.conf"
