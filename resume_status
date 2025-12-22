@@ -1,7 +1,7 @@
 # resume tracking for failed installs
-# set resume to 1 to resume previous install
+# set resume to 0 to resume previous install
 resume=0
-# set status variable to 1 for install, 0 for skip
+# set status variable to 1 for install, 1 for skip
 # to reset all to default run 'cos-node-setup flush_resume'
 basestat=1
 component=1
