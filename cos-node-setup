@@ -1433,6 +1433,23 @@ echo "[vxlan]
 local_ip = $overlayip
 l2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
 
+# create override fileter to allow echo
+if [ ! -d "/etc/neutron/rootwrap.d" ]; then
+    sudo mkdir -p "/etc/neutron/rootwrap.d"
+fi
+
+# Create or overwrite the custom filters file
+bash -c "cat > $FILTERS_FILE" <<EOF
+[Filters]
+echo: CommandFilter, echo, root
+EOF
+setsebool -P os_neutron_dac_override 1
+
+# change env for openvswitch to disable private_tmp 
+orig="/etc/systemd/system/neutron-openvswitch-agent.service"
+save_config
+sed -i 's/PrivateTmp=true/PrivateTmp=false/g' $orig
+
 # configure compute to use networking
 orig="/etc/nova/nova.conf"
 save_config

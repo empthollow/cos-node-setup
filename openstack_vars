@@ -18,7 +18,8 @@ hzallowedhosts="*"
 srvtz=CST
 
 # neutron
-provideriface=enp2s0
+integrationbridge=br-int
+provideriface=br-ex
 overlayip=$controllerip
 
 #swift
