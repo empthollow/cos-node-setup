@@ -1,0 +1,10 @@
+require {
+    type neutron_t;
+    type openvswitch_var_run_t;
+    class sock_file write;
+    class unix_stream_socket connectto;
+}
+
+# Allow the Neutron Agent to talk to the OVS Socket
+allow neutron_t openvswitch_var_run_t:sock_file write;
+allow neutron_t openvswitch_var_run_t:unix_stream_socket connectto;

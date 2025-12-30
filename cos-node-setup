@@ -885,7 +885,7 @@ firewall-cmd --reload
 # echo "configuring openstack..."
 
 echo "populating database..."
-/bin/sh -c "glance-manage db_sync" glance
+su -s /bin/sh -c "glance-manage db_sync" glance
 
 echo "starting service..."
 systemctl enable --now openstack-glance-api.service
@@ -1035,7 +1035,7 @@ nova_compute_node()
 # install nova
 stage=novanode
 echo "==============================================="
-echo "      installing nove for compute node"
+echo "      installing nova for compute node"
 echo "==============================================="
 
 echo "installing nova packages..."
@@ -1054,6 +1054,7 @@ sed -i "/^\[vnc\]/a enabled = true\nserver_listen = 0.0.0.0\nserver_proxyclient_
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = http://controller:5000/v3\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
+sed -i "/^\[libvirt\]/a virt_type = kvm\nvideo_image_meta_model = vga\nhw_machine_type = x86_64=q35\ncpu_mode = host-passthrough" /etc/nova/nova.conf
 
 # finalize installation
 
@@ -1139,7 +1140,7 @@ firewall-cmd --reload
 
 # populate database
 echo "populating database ..."
-/bin/sh -c "cinder-manage db sync" cinder
+su -s /bin/sh -c "cinder-manage db sync" cinder
 
 # start services
 echo "starting services..."
@@ -1382,20 +1383,59 @@ sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\
 ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
 
 echo "populating database..."
-sudo -u neutron HOME=/var/lib/neutron neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head
-# /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
+su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
 echo "adding firewall rules..."
 firewall-cmd --add-port=9696/tcp --permanent
 firewall-cmd --reload
 
+# SELinux module installation to prevent 'Permission Denied' errors in the dhcp-agent logs
+if [ -f "./selinux/neutron_dns_proactive.te" ]; then
+	echo "SELinux policy file found."
+	# Compile the module (intermediate file)
+	checkmodule -M -m -o ./selinux/neutron_dns_proactive.mod ./selinux/neutron_dns_proactive.te
+	# Create the policy package (binary file)
+	semodule_package -o ./selinux/$(cat /etc/os-release | awk -F"=" '{ print $2 }' | sed s/\"//g | sed s/\ /_/g | head -1)_neutron_dns_proactive.pp -m ./selinux/neutron_dns_proactive.mod
+	# Install the policy into the kernel
+	# Ensure the install command matches the name you just generated
+	OS_NAME=$(cat /etc/os-release | awk -F"=" '{ print $2 }' | sed s/\"//g | sed s/\ /_/g | head -1)
+	semodule -i ./selinux/${OS_NAME}_neutron_dns_proactive.pp
+else
+	echo "SELinux policy file not found. Exiting."
+	exit 1
+fi
 
+# create OVS bridges and ports
+ovs-vsctl add-br $integrationbridge
+ovs-vsctl add-br $providerbridge
+ovs-vsctl add-port $providerbridge $provideriface
+
+UNIT_FILE="/etc/systemd/system/ovs-br-ex-ip.service"
+cat > "$UNIT_FILE" <<EOF
+[Unit]
+Description=Assign IP to OVS br-ex
+After=openvswitch.service
+Requires=openvswitch.service
+Before=neutron-openvswitch-agent.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/ip link set br-ex up
+ExecStart=/usr/sbin/ip addr add $providercidrip dev br-ex
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload unit files
+systemctl daemon-reload
+# Start and enable the services
 echo "starting services..."
-
 systemctl restart openstack-nova-api.service
-systemctl enable neutron-server.service neutron-openvswitch-agent.service neutron-dhcp-agent.service neutron-metadata-agent.service neutron-l3-agent.service
-
-systemctl start neutron-server.service \
-neutron-openvswitch-agent.service neutron-dhcp-agent.service \
+systemctl enable --now neutron-server.service \
+ovs-br-ex-ip.service \ 
+neutron-openvswitch-agent.service \
+neutron-dhcp-agent.service \
 neutron-metadata-agent.service \
 neutron-l3-agent.service
 
@@ -1414,6 +1454,7 @@ echo "==============================================="
 
 # install neutron package
 dnf install -y openstack-neutron-openvswitch
+usermod -aG hugetlbfs neutron
 
 # configure neutron.conf
 echo "writing neutron configs..."
@@ -1426,24 +1467,21 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/
 # Configure the Open vSwitch agent¶
 orig="/etc/neutron/plugins/ml2/openvswitch_agent.ini"
 save_config
-sed -i "/^\[ovs\]/a integration_bridge = $integrationbridge\nbridge_mappings = provider:$provideriface\nlocal_ip = $overlayip" /etc/neutron/plugins/ml2/openvswitch_agent.ini
-sed -i "/^\[agent\]/a tunnel_types = vxlan\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini 
+sed -i "/^\[ovs\]/a integration_bridge = $integrationbridge\ntunnel_bridge = $tunnelbridge\nlocal_ip = $overlayip\novsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 sed -i "/^\[securitygroup\]/a enable_security_group = true\nfirewall_driver = openvswitch" /etc/neutron/plugins/ml2/openvswitch_agent.ini
-echo "[vxlan]
-local_ip = $overlayip
-l2_population = true" >> /etc/neutron/plugins/ml2/openvswitch_agent.ini 
+sed -i "/^\[agent\]/a tunnel_types = vxlan\nl2_population = true" /etc/neutron/plugins/ml2/openvswitch_agent.ini
 
 # create override fileter to allow echo
-if [ ! -d "/etc/neutron/rootwrap.d" ]; then
-    sudo mkdir -p "/etc/neutron/rootwrap.d"
-fi
+## if [ ! -d "/etc/neutron/rootwrap.d" ]; then
+##     sudo mkdir -p "/etc/neutron/rootwrap.d"
+## fi
 
 # Create or overwrite the custom filters file
-bash -c "cat > $FILTERS_FILE" <<EOF
-[Filters]
-echo: CommandFilter, echo, root
-EOF
-setsebool -P os_neutron_dac_override 1
+## bash -c "cat > $FILTERS_FILE" <<EOF
+## [Filters]
+## echo: CommandFilter, echo, root
+## EOF
+## setsebool -P os_neutron_dac_override 1
 
 # change env for openvswitch to disable private_tmp 
 orig="/etc/systemd/system/neutron-openvswitch-agent.service"
@@ -1455,10 +1493,44 @@ orig="/etc/nova/nova.conf"
 save_config
 sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/nova/nova.conf
 
+# set up openvswitch 
+ovs-vsctl add-br $integrationbridge
+
+# Steps that allow neutron to interact with OVS without permission issues
+# Create the systemd override directory for OVS to fix directory permissions and group ownership
+sudo mkdir -p /etc/systemd/system/openvswitch.service.d/
+cat <<EOF | sudo tee /etc/systemd/system/openvswitch.service.d/override.conf
+[Service]
+ExecStartPre=/usr/bin/mkdir -p /var/run/openvswitch
+ExecStartPre=/usr/bin/chown -R openvswitch:hugetlbfs /var/run/openvswitch
+ExecStartPre=/usr/bin/chmod 775 /var/run/openvswitch
+EOF
+
+# Set the OVSDB flags to ensure the socket itself is created as 0660
+sudo sed -i 's/^OVSDB_SERVER_EXTRA_FLAGS=.*/OVSDB_SERVER_EXTRA_FLAGS="--unixctl-chmod=0660"/' /etc/sysconfig/openvswitch
+# If the line doesn't exist, add it:
+grep -q "OVSDB_SERVER_EXTRA_FLAGS" /etc/sysconfig/openvswitch || echo 'OVSDB_SERVER_EXTRA_FLAGS="--unixctl-chmod=0660"' | sudo tee -a /etc/sysconfig/openvswitch
+
+# SELinux module installation for ovs lock override
+if [ -f "./selinux/neutron_ovs_proactive.te" ]; then
+	echo "SELinux policy file found."
+	# Compile the module (intermediate file)
+	checkmodule -M -m -o ./selinux/neutron_ovs_proactive.mod ./selinux/neutron_ovs_proactive.te
+	# Create the policy package (binary file)
+	semodule_package -o ./selinux/$(cat /etc/os-release | awk -F"=" '{ print $2 }' | sed s/\"//g | sed s/\ /_/g | head -1)_neutron_ovs_proactive.pp -m ./selinux/neutron_ovs_proactive.mod
+	# Install the policy into the kernel
+	# Ensure the install command matches the name you just generated
+	OS_NAME=$(cat /etc/os-release | awk -F"=" '{ print $2 }' | sed s/\"//g | sed s/\ /_/g | head -1)
+	semodule -i ./selinux/${OS_NAME}_neutron_ovs_proactive.pp
+else
+	echo "SELinux policy file not found. Exiting."
+	exit 1
+fi
+
 # start / restart services
+systemctl enable --now openvswitch
 systemctl restart openstack-nova-compute.service
-systemctl enable neutron-openvswitch-agent.service
-systemctl start neutron-openvswitch-agent.service
+systemctl enable --now neutron-openvswitch-agent.service
 
 # Verify Neutron OVS agent is running
 verify_service_running "neutron-openvswitch-agent.service" || echo "WARNING: neutron-openvswitch-agent may not be fully started"
@@ -1908,7 +1980,7 @@ cd $dir
 [ -e "clean_functions" ] && . clean_functions || { echo "clean_functions does not exist" && exit 1; }
 # startup checks
 if [ "$1" ==  "" ]; then
-	echo "Designed for CentOS"
+	echo "Designed on CentOS9"
 	
 	#check for internet access
 	echo "Checking for internet ..."

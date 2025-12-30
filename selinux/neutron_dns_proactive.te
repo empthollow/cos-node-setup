@@ -1,0 +1,14 @@
+module neutron_dns_proactive 1.0;
+
+require {
+    type neutron_t;
+    type dnsmasq_t;
+    type neutron_var_lib_t;
+    class dir { add_name remove_name write };
+    class file { create getattr open read write unlink };
+}
+
+#============= dnsmasq_t ==============
+# Allow dnsmasq (spawned by neutron) to manage its lease/pid files
+allow dnsmasq_t neutron_var_lib_t:dir { add_name remove_name write };
+allow dnsmasq_t neutron_var_lib_t:file { create getattr open read write unlink };

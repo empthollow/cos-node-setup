@@ -19,8 +19,10 @@ srvtz=CST
 
 # neutron
 integrationbridge=br-int
+tunnelbridge = br-tun
 provideriface=br-ex
 overlayip=$controllerip
+providercidrip=172.22.2.21/24
 
 #swift
 storagedev1=/dev/sdb
