@@ -821,6 +821,8 @@ save_config
 sed -i "/\[DEFAULT\]/a log_level = debug\nuse_journal = True" /etc/keystone/keystone.conf
 sed -i "/\[database\]/a connection = mysql+pymysql://keystone:$KEYSTONE_DBPASS@controller/keystone" /etc/keystone/keystone.conf
 sed -i '/\^[token\]/a provider = fernet' /etc/keystone/keystone.conf
+sed -i "/^\[cache\]/a enabled = True\nbackend = dogpile.cache.memcached\nbackend_argument = url:controller:11211\nmemcache_servers = controller:11211" /etc/keystone/keystone.conf
+sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/keystone/keystone.conf
 su -s /bin/sh -c "keystone-manage db_sync" keystone
 keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
 keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
