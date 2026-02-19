@@ -521,9 +521,6 @@ SWIFT_PASS=$rabbit_pass
 
 . openstack_passwords
 
-# Keystone endpoint variable for consistency
-KEYSTONE_V3_ENDPOINT="http://controller:5000/v3"
-
 echo "========================================================================================"
 echo "Your passwords are in the file $(pwd)/openstack_passwords"
 echo "========================================================================================"
@@ -558,7 +555,7 @@ export OS_USER_DOMAIN_NAME=Default
 export OS_SYSTEM_SCOPE=all
 export OS_USERNAME=admin
 export OS_PASSWORD=$ADMIN_PASS
-export OS_AUTH_URL=http://controller:5000/v3
+export OS_AUTH_URL=$KEYSTONE_V3_ENDPOINT
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > admin-system-openrc
 		echo "==========================================================="
@@ -571,7 +568,7 @@ export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=admin
 export OS_USERNAME=admin
 export OS_PASSWORD=$ADMIN_PASS
-export OS_AUTH_URL=http://controller:5000/v3
+export OS_AUTH_URL=$KEYSTONE_V3_ENDPOINT
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > admin-project-openrc
 		echo "==========================================================="
@@ -588,7 +585,7 @@ export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=myproject
 export OS_USERNAME=$myuser
 export OS_PASSWORD=$MYUSER_PASS
-export OS_AUTH_URL=http://controller:5000/v3
+export OS_AUTH_URL=$KEYSTONE_V3_ENDPOINT
 export OS_IDENTITY_API_VERSION=3
 export OS_IMAGE_API_VERSION=2" > $myuser-openrc
 		echo "==========================================================="
@@ -827,9 +824,9 @@ su -s /bin/sh -c "keystone-manage db_sync" keystone
 keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
 keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
 keystone-manage bootstrap --bootstrap-password $ADMIN_PASS \
-  --bootstrap-admin-url http://controller:5000/v3/ \
-  --bootstrap-internal-url http://controller:5000/v3/ \
-  --bootstrap-public-url http://controller:5000/v3/ \
+  --bootstrap-admin-url $KEYSTONE_V3_ENDPOINT/ \
+  --bootstrap-internal-url $KEYSTONE_V3_ENDPOINT/ \
+  --bootstrap-public-url $KEYSTONE_V3_ENDPOINT/ \
   --bootstrap-region-id RegionOne
 
 # /etc/httpd/conf/httpd.conf
@@ -854,7 +851,7 @@ export OS_PASSWORD=$ADMIN_PASS
 export OS_PROJECT_NAME=admin
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_DOMAIN_NAME=Default
-export OS_AUTH_URL=http://controller:5000/v3
+export OS_AUTH_URL=$KEYSTONE_V3_ENDPOINT
 export OS_IDENTITY_API_VERSION=3
 sed -i /keystonestat/s/1/0/ resume_status
 
