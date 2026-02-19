@@ -521,6 +521,9 @@ SWIFT_PASS=$rabbit_pass
 
 . openstack_passwords
 
+# Keystone endpoint variable for consistency
+KEYSTONE_V3_ENDPOINT="http://controller:5000/v3"
+
 echo "========================================================================================"
 echo "Your passwords are in the file $(pwd)/openstack_passwords"
 echo "========================================================================================"
@@ -528,22 +531,41 @@ echo "==========================================================================
 
 srcopenrc()
 {
-#check for admin openrc
-if [ -e "admin-openrc" ]; then
-	echo "admin-openrc found"
-	osadmin=admin-openrc
+#check for admin openrc (RBAC compliant)
+if [ -e "admin-system-openrc" ] && [ -e "admin-project-openrc" ]; then
+	echo "RBAC-compliant admin openrc files found"
+	osadmin_system=admin-system-openrc
+	osadmin_project=admin-project-openrc
+	osadmin=admin-project-openrc  # Default to project-scoped for backwards compatibility
 	sleep 2
 else
 	echo -n "specify path (if no, files will be created) [y/n] >"
 	read -t 5 specifypath || specifypath="n"
 	if [ "$specifypath" == "y" ]; then  
-		echo -n "enter path of admin-openrc or equivalent file > "
-		read osadmin
+		echo -n "enter path of admin-system-openrc (for endpoint/hypervisor/service list) > "
+		read osadmin_system
+		echo -n "enter path of admin-project-openrc (for server/network/volume operations) > "
+		read osadmin_project
+		osadmin=$osadmin_project  # Default to project-scoped
 	else
-	# Create myuser and openrc auth files
+	# Create myuser and RBAC-compliant admin openrc auth files
 		echo "==========================================================="
-		echo "creating $myuser and admin openrc auth files "
+		echo "creating $myuser and RBAC-compliant admin openrc auth files "
 		echo "==========================================================="
+		# Create admin-system-openrc for system-scoped operations
+		echo "export OS_PROJECT_DOMAIN_NAME=Default
+export OS_USER_DOMAIN_NAME=Default
+export OS_SYSTEM_SCOPE=all
+export OS_USERNAME=admin
+export OS_PASSWORD=$ADMIN_PASS
+export OS_AUTH_URL=http://controller:5000/v3
+export OS_IDENTITY_API_VERSION=3
+export OS_IMAGE_API_VERSION=2" > admin-system-openrc
+		echo "==========================================================="
+		echo "$(pwd)/admin-system-openrc created "
+		echo "  Use for: endpoint list, hypervisor list, service list"
+		echo "==========================================================="
+		# Create admin-project-openrc for project-scoped operations
 		echo "export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=admin
@@ -551,11 +573,14 @@ export OS_USERNAME=admin
 export OS_PASSWORD=$ADMIN_PASS
 export OS_AUTH_URL=http://controller:5000/v3
 export OS_IDENTITY_API_VERSION=3
-export OS_IMAGE_API_VERSION=2" > admin-openrc
+export OS_IMAGE_API_VERSION=2" > admin-project-openrc
 		echo "==========================================================="
-		echo "$(pwd)/admin-openrc created "
+		echo "$(pwd)/admin-project-openrc created "
+		echo "  Use for: server create, network list, volume create"
 		echo "==========================================================="
-		osadmin=admin-openrc
+		osadmin_system=admin-system-openrc
+		osadmin_project=admin-project-openrc
+		osadmin=admin-project-openrc  # Default to project-scoped
 		source $osadmin
 		openstack user create --domain default --password $MYUSER_PASS $myuser
 		echo "export OS_PROJECT_DOMAIN_NAME=Default
@@ -851,10 +876,15 @@ mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
 
 srcopenrc
 echo "configuring openstack..."
+# Project-scoped operations: user, project, role
+source $osadmin_project
 openstack user create --domain default --password $GLANCE_PASS glance
-openstack project create service
+openstack project create --or-show service
 openstack role add --project service --user glance admin
+openstack role add --project service --user glance service
 openstack role add --user glance --user-domain Default --system all reader
+# System-scoped operations: service, endpoint
+source $osadmin_system
 openstack service create --name glance --description "OpenStack Image" image
 openstack endpoint create --region RegionOne image public http://controller:9292
 openstack endpoint create --region RegionOne image internal http://controller:9292
@@ -872,12 +902,13 @@ orig="/etc/glance/glance-api.conf"
 save_config
 sed -i "/\[DEFAULT\]/a log_level = debug\nuse_journal = True" /etc/glance/glance-api.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://glance:$GLANCE_DBPASS@controller/glance" /etc/glance/glance-api.conf 
-sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS" /etc/glance/glance-api.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS" /etc/glance/glance-api.conf
 sed -i "/^\[paste_deploy\]/a flavor = keystone" /etc/glance/glance-api.conf 
 sed -i '/^\#enabled_backends/a enabled_backends=fs:file' /etc/glance/glance-api.conf
 sed -i '/^\#default_backend/a default_backend = fs' /etc/glance/glance-api.conf
-sed -i 's@\#filesystem_store_datadir@filesystem_store_datadir = /var\/lib\/glance\/images/@' /etc/glance/glance-api.conf
-sed -i "/^\[oslo_limit\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS"  /etc/glance/glance-api.conf
+echo "[fs]
+filesystem_store_datadir = /var/lib/glance/" >> /etc/glance/glance-api.conf
+sed -i "/^\[oslo_limit\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = glance\npassword = $GLANCE_PASS"  /etc/glance/glance-api.conf
 echo "adding firewall rules..."
 firewall-cmd --add-port=9292/tcp --permanent
 firewall-cmd --reload
@@ -907,8 +938,14 @@ mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '
 
 echo "configuring openstack..."
 srcopenrc
+# Project-scoped operations: user, project, role
+source $osadmin_project
+openstack project create --or-show service
 openstack user list | grep -cw placement || openstack user create --domain default --password $PLACEMENT_PASS placement
 openstack role add --project service --user placement admin
+openstack role add --project service --user placement service
+# System-scoped operations: service, endpoint
+source $osadmin_system
 openstack service create --name placement --description "Placement API" placement
 openstack endpoint create --region RegionOne placement public http://controller:8778
 openstack endpoint create --region RegionOne placement internal http://controller:8778
@@ -920,7 +957,7 @@ orig="/etc/placement/placement.conf"
 sed -i "/\[DEFAULT\]/a log_level = debug\nuse_journal = True" /etc/placement/placement.conf
 sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
-sed -i "/^\[keystone_authtoken\]/a auth_url = http://controller:5000/v3 \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
+sed -i "/^\[keystone_authtoken\]/a auth_url = $KEYSTONE_V3_ENDPOINT \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
 orig="/etc/httpd/conf.d/00-placement-api.conf"
 sed -i '/^<Virtual/a \ \ <Directory /usr/bin>\n\tRequire all granted \n\ \ </Directory>' /etc/httpd/conf.d/00-placement-api.conf
 echo "adding firewall rules..."
@@ -964,8 +1001,10 @@ mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
 # adding nova user
 echo "configuring openstack..."
 srcopenrc
+openstack project create --or-show service
 openstack user create --domain default --password $NOVA_PASS nova
 openstack role add --project service --user nova admin
+openstack role add --project service --user nova service
 
 # creating nova services
 openstack service create --name nova --description "OpenStack Compute" compute
@@ -985,15 +1024,17 @@ sed -i "/^\[DEFAULT\]/a log_level = debug\nuse_journal = True\nenabled_apis = os
 sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova_api" /etc/nova/nova.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova" /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
-sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
-sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = http://controller:5000\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = $KEYSTONE_V3_ENDPOINT\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[vnc\]/a enabled = true\nserver_listen = $controllerip\nserver_proxyclient_address = $controllerip" /etc/nova/nova.conf
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
-sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = http://controller:5000/v3\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
+sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
+# sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
 echo "adding firewall rules..."
 firewall-cmd --add-port=8774/tcp --permanent
+firewall-cmd --add-port=6080/tcp --permanent
 firewall-cmd --reload
 
 # populate nova-api db
@@ -1040,6 +1081,7 @@ echo "==============================================="
 
 echo "installing nova packages..."
 dnf install -y openstack-nova-compute libvirt-daemon
+useradd -aG nova hugetlbfs
 
 # write configs
 echo "writing nova config..."
@@ -1048,13 +1090,14 @@ orig="/etc/nova/nova.conf"
 save_config
 sed -i "/^\[DEFAULT\]/a log_level = debug\nuse_journal = True\nenabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nmy_ip = $computeip\ncompute_driver = libvirt.LibvirtDriver"  /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
-sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000/\nauth_url = http://controller:5000/\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
-sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = https://controller:5000\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = $KEYSTONE_V3_ENDPOINT\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[vnc\]/a enabled = true\nserver_listen = 0.0.0.0\nserver_proxyclient_address = $computeip\nnovncproxy_base_url = http://controller:6080/vnc_auto.html" /etc/nova/nova.conf
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
-sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = http://controller:5000/v3\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
+sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[libvirt\]/a virt_type = kvm\nvideo_image_meta_model = vga\nhw_machine_type = x86_64=q35\ncpu_mode = host-passthrough" /etc/nova/nova.conf
+sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
 
 # finalize installation
 
@@ -1078,12 +1121,13 @@ systemctl start libvirtd.service openstack-nova-compute.service
 verify_service_running "libvirtd.service" || echo "WARNING: libvirtd may not be fully started"
 verify_service_running "openstack-nova-compute.service" || echo "WARNING: nova-compute may not be fully started"
 
-sed -i /novastat/s/1/0/ resume_status
 
 # Verify Nova compute installation
 verify_install_complete "Nova Compute Node" \
 	"libvirtd.service" \
 	"openstack-nova-compute.service" || exit 1
+
+sed -i /novastat/s/1/0/ resume_status
 
 echo ""
 echo "nova compute (node) set up; run the following to discover hosts manually on the controller node"
@@ -1108,8 +1152,14 @@ mysql -e "GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY '$CINDE
 # openstack setup
 echo "configuring openstack..."
 srcopenrc
+# Project-scoped operations: user, project, role
+source $osadmin_project
+openstack project create --or-show service
 openstack user create --domain default --password $CINDER_PASS cinder
 openstack role add --project service --user cinder admin
+openstack role add --project service --user cinder service
+# System-scoped operations: service, endpoint
+source $osadmin_system
 openstack service create --name cinderv3 --description "OpenStack Block Storage" volumev3
 openstack endpoint create --region RegionOne volumev3 public http://controller:8776/v3/%\(project_id\)s
 openstack endpoint create --region RegionOne volumev3 internal http://controller:8776/v3/%\(project_id\)s
@@ -1124,7 +1174,7 @@ echo "writing cinder config..."
 orig="/etc/cinder/cinder.conf"
 save_config
 sed -i "/^\[DEFAULT\]/a log_level = debug\nuse_journal = True\ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy = keystone\nmy_ip = $controllerip" /etc/cinder/cinder.conf
-sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://cinder:$CINDER_DBPASS@controller/cinder" /etc/cinder/cinder.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
 # /etc/nova/nova.conf
@@ -1193,7 +1243,7 @@ volume_group = cinder-volumes
 target_protocol = iscsi
 target_helper = lioadm" >> /etc/cinder/cinder.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/cinder.conf
-sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
 
 
 # start and enable services
@@ -1320,8 +1370,14 @@ mysql -e "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY '$NEU
 # configure openstack
 echo "configuring openstack..."
 srcopenrc
+# Project-scoped operations: user, project, role
+source $osadmin_project
+openstack project create --or-show service
 openstack user create --domain default --password $NEUTRON_PASS neutron
 openstack role add --project service --user neutron admin
+openstack role add --project service --user neutron service
+# System-scoped operations: service, endpoint
+source $osadmin_system
 openstack service create --name neutron --description "OpenStack Networking" network
 openstack endpoint create --region RegionOne network public http://controller:9696
 openstack endpoint create --region RegionOne network internal http://controller:9696
@@ -1337,9 +1393,9 @@ save_config
 echo "writing neutron config..."
 sed -i "/^\[DEFAULT\]/a log_level = debug\nuse_journal = True\ncore_plugin \= ml2\nservice_plugins \= router\ntransport_url \= rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy \= keystone\nnotify_nova_on_port_status_changes \= true\nnotify_nova_on_port_data_changes \= true" /etc/neutron/neutron.conf
 sed -i "/^\[database\]/a connection = mysql+pymysql://neutron:$NEUTRON_DBPASS@controller/neutron" /etc/neutron/neutron.conf
-sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/neutron.conf
-sed -i "/^\[nova\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/neutron/neutron.conf
+sed -i "/^\[nova\]/a auth_url = $KEYSTONE_V3_ENDPOINT\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/neutron/neutron.conf
 
 # Configure the Modular Layer 2 (ML2) plug-in
 orig="/etc/neutron/plugins/ml2/ml2_conf.ini"
@@ -1373,20 +1429,19 @@ sed -i "/^\[DEFAULT\]/a interface_driver = openvswitch\ndhcp_driver = neutron.ag
 # metadata_agent.ini
 orig="/etc/neutron/metadata_agent.ini"
 save_config
-sed -i "/^\[DEFAULT\]/a nova_metadata_host = controller \nmetadata_proxy_shared_secret = METADATA_SECRET" /etc/neutron/metadata_agent.ini
+sed -i "/^\[DEFAULT\]/a nova_metadata_host = controller \nmetadata_proxy_shared_secret = $METADATA_SECRET" /etc/neutron/metadata_agent.ini
 
 # nova.conf
 orig="/etc/nova/nova.conf"
 save_config
-sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS\nservice_metadata_proxy = true\nmetadata_proxy_shared_secret = METADATA_SECRET" /etc/nova/nova.conf
+sed -i "/^\[neutron\]/a auth_url = $KEYSTONE_V3_ENDPOINT\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS\nservice_metadata_proxy = true\nmetadata_proxy_shared_secret = $METADATA_SECRET" /etc/nova/nova.conf
 
 ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
 
 echo "populating database..."
 su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
 echo "adding firewall rules..."
-firewall-cmd --add-port=9696/tcp --permanent
-firewall-cmd --reload
+
 
 # SELinux module installation to prevent 'Permission Denied' errors in the dhcp-agent logs
 if [ -f "./selinux/neutron_dns_proactive.te" ]; then
@@ -1439,6 +1494,10 @@ neutron-dhcp-agent.service \
 neutron-metadata-agent.service \
 neutron-l3-agent.service
 
+firewall-cmd --add-port=9696/tcp --permanent
+firewall-cmd --add-port=4789/udp --permanent
+firewall-cmd --reload
+
 sed -i /neutronctrlstat/s/1/0/ resume_status
 }
 
@@ -1461,7 +1520,7 @@ echo "writing neutron configs..."
 orig="/etc/neutron/neutron.conf"
 save_config
 sed -i "/^\[DEFAULT\]/a log_level = debug\nuse_journal = True\ntransport_url \= rabbit://openstack:$RABBIT_PASS@controller:5672\nauth_strategy \= keystone" /etc/neutron/neutron.conf
-sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
+sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/neutron/neutron.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/neutron/tmp" /etc/neutron/neutron.conf
 
 # Configure the Open vSwitch agent¶
@@ -1491,7 +1550,7 @@ sed -i 's/PrivateTmp=true/PrivateTmp=false/g' $orig
 # configure compute to use networking
 orig="/etc/nova/nova.conf"
 save_config
-sed -i "/^\[neutron\]/a auth_url = http://controller:5000\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/nova/nova.conf
+sed -i "/^\[neutron\]/a auth_url = $KEYSTONE_V3_ENDPOINT\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nregion_name = RegionOne\nproject_name = service\nusername = neutron\npassword = $NEUTRON_PASS" /etc/nova/nova.conf
 
 # set up openvswitch 
 ovs-vsctl add-br $integrationbridge
@@ -1538,10 +1597,16 @@ verify_service_running "neutron-openvswitch-agent.service" || echo "WARNING: neu
 # Optionally check controller connectivity for dependent nodes
 check_controller_connectivity "controller" || echo "NOTE: Controller not yet available (expected if not yet installed)"
 
+firewall-cmd --add-port=9696/tcp --permanent
+firewall-cmd --add-port=4789/udp --permanent
+firewall-cmd --reload
+
 sed -i /neutroncomputestat/s/1/0/ resume_status
 
 # Verify Neutron compute installation
 verify_install_complete "Neutron Compute Node" "neutron-openvswitch-agent.service" || exit 1
+
+sed -i /neutroncomputestat/s/1/0/ resume_status
 }
 
 swift_controller()
@@ -1555,8 +1620,14 @@ echo "==============================================="
 # create openstack sift user and services
 echo "configuring openstack..."
 srcopenrc
+# Project-scoped operations: user, project, role
+source $osadmin_project
+openstack project create --or-show service
 openstack user create --domain default --password $SWIFT_PASS swift
 openstack role add --project service --user swift admin
+openstack role add --project service --user swift service
+# System-scoped operations: service, endpoint
+source $osadmin_system
 openstack service create --name swift --description "OpenStack Object Storage" object-store
 openstack endpoint create --region RegionOne object-store public http://controller:8080/v1/AUTH_%\(project_id\)s
 openstack endpoint create --region RegionOne object-store internal http://controller:8080/v1/AUTH_%\(project_id\)s
@@ -1578,7 +1649,7 @@ sed -i -e '/^\[app:proxy-server\]/,/^\[/{/egg:swift#proxy/a account_autocreate =
 sed -i -e '/\[filter:keystoneauth\]/s/^#\ //' /etc/swift/proxy-server.conf
 sed -i -e '/egg:swift#keystoneauth/{s/^#\ //' -e 'a operator_roles = admin,user}' /etc/swift/proxy-server.conf
 sed -i -e '/\[filter:authtoken\]/s/^#\ //' /etc/swift/proxy-server.conf
-sed -i -e "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware.auth_token:filter_factory\nwww_authenticate_uri = http://controller:5000\nauth_url = http://controller:5000\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_id = default\nuser_domain_id = default\nproject_name = service\nusername = swift\npassword = $SWIFT_PASS\n delay_auth_decision = True" /etc/swift/proxy-server.conf
+sed -i -e "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware.auth_token:filter_factory\nwww_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_id = default\nuser_domain_id = default\nproject_name = service\nusername = swift\npassword = $SWIFT_PASS\n delay_auth_decision = True" /etc/swift/proxy-server.conf
 sed -i -e '/^\[filter:cache\]/,/^\[/{/egg:swift#memcache/a memcache_servers = controller:11211}' /etc/swift/proxy-server.conf
 
 # add firewall rules
@@ -1975,6 +2046,9 @@ dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cd $dir 
 # check for inclusion files
 [ -e "openstack_passwords" ] && . openstack_passwords || { echo "openstack_passwords does not exist"; }
+
+# Keystone endpoint variable for consistency
+KEYSTONE_V3_ENDPOINT="http://controller:5000/v3"
 [ -e "openstack_vars" ] && . openstack_vars || { echo "openstack_vars does not exist" && exit 1; }
 [ -e "resume_status" ] && . resume_status || { echo "resume_status does not exist" && exit 1; }
 [ -e "clean_functions" ] && . clean_functions || { echo "clean_functions does not exist" && exit 1; }
