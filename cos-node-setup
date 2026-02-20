@@ -2090,7 +2090,6 @@ cd $dir
 [ -e "openstack_passwords" ] && . openstack_passwords || { echo "openstack_passwords does not exist"; }
 
 # Keystone endpoint variable for consistency
-KEYSTONE_V3_ENDPOINT="http://controller:5000/v3"
 [ -e "openstack_vars" ] && . openstack_vars || { echo "openstack_vars does not exist" && exit 1; }
 [ -e "resume_status" ] && . resume_status || { echo "resume_status does not exist" && exit 1; }
 [ -e "clean_functions" ] && . clean_functions || { echo "clean_functions does not exist" && exit 1; }
