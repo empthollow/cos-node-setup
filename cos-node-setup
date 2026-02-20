@@ -32,9 +32,9 @@ clean_resume()
 # fix variable to work
 echo "cleaning up..."
 case $resumeclean in
-	componenetstat		) 
+	componentstat		) 
 		if [ "$archetype" = "controller" ]; then
-			clean_compnents_controller
+			clean_components_controller
 		else
 			clean_components_node
 		fi	
@@ -72,6 +72,8 @@ case $resumeclean in
 		fi
 		;;
 	horizonstat		) clean_horizon ;;
+	swiftctrlstat		) clean_swift_controller ;;
+	swiftnodestat		) clean_swift_node ;;
 
 esac
 }
@@ -332,7 +334,14 @@ COMMANDS (can be chained):
   cinder_node          Install and configure Cinder - Block Storage Node
   cinder_backup_node   Install and configure Cinder - Backup Node
   horizon_controller   Install and configure Horizon (Dashboard)
-  swift_controller     Install and configure Swift (Object Storage)
+  swift_controller     Install and configure Swift (Object Storage) - Controller
+  swift_node           Install and configure Swift - Object Storage Node
+
+ARCHETYPES (Full Node Installations):
+  controller_archetype      Complete controller node (all controller services)
+  computenode_archetype     Complete compute node (nova + neutron)
+  blockstorenode_archetype  Complete block storage node (cinder)
+  objectstorenode_archetype Complete object storage node (swift)
 
 SAFETY FEATURES:
   ✓ Automatic backup of all configuration files before editing
@@ -350,13 +359,16 @@ USAGE EXAMPLES:
    (Will prompt for configuration and install entire stack)
 
 2. Install Controller Node Only:
-   sudo -s ./cos-node-setup controller
+   sudo -s ./cos-node-setup controller_archetype
 
 3. Install Compute Node Only:
-   sudo -s ./cos-node-setup nova_compute_node neutron_compute_node
+   sudo -s ./cos-node-setup computenode_archetype
 
 4. Install Multiple Components in Sequence:
    sudo -s ./cos-node-setup base_compute_node nova_compute_node neutron_compute_node
+
+5. Install Object Storage Node:
+   sudo -s ./cos-node-setup objectstorenode_archetype
 
 INSTALLATION ORDER:
 
@@ -373,11 +385,20 @@ Controller Node (Sequential):
   10. neutron_controller
   11. cinder_controller
   12. horizon_controller
+  13. swift_controller (optional)
 
 Compute Node (Sequential):
   1. base_compute_node
   2. nova_compute_node
   3. neutron_compute_node
+
+Block Storage Node (Sequential):
+  1. base_compute_node
+  2. cinder_node
+
+Object Storage Node (Sequential):
+  1. base_compute_node
+  2. swift_node
 
 IMPORTANT NOTES:
 
@@ -1806,7 +1827,9 @@ resumeclean=cinderstat
 resumeclean=horizonstat
 [ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "horizon complete" || horizon
 resumeclean=neutronstat
-[ "$resume" == 1 ] && [ "$horizonstat" == "0" ] && echo "neutron complete" || neutron_controller
+[ "$resume" == 1 ] && [ "$neutronstat" == "0" ] && echo "neutron complete" || neutron_controller
+resumeclean=swiftctrlstat
+[ "$resume" == 1 ] && [ "$swiftctrlstat" == "0" ] && echo "swift complete" || swift_controller
 # reset resume
 flush_resume
 echo "+++++++++++++++++++++++++++++++++++++++++++++++"
@@ -1853,6 +1876,26 @@ resumeclean=cinderstat
 flush_resume
 echo "+++++++++++++++++++++++++++++++++++++++++++++++"
 echo "  block storage archetype install complete "
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+}
+
+objectstorenode_archetype()
+{ 
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+echo "         object storage node archetype  "
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+# set resume if errors
+sed -i /resume/s/0/1/ resume_status
+resumeclean=basestat
+[ "$resume" == 1 ] && [ "$basestat" == "0" ] && echo "base complete" || base_all 
+resumeclean=componentstat
+[ "$resume" == 1 ] && [ "$componentstat" == "0" ] && echo "components complete" || components_node
+resumeclean=swiftnodestat
+[ "$resume" == 1 ] && [ "$swiftnodestat" == "0" ] && echo "swift complete" || swift_node
+# reset resume
+flush_resume
+echo "+++++++++++++++++++++++++++++++++++++++++++++++"
+echo "  object storage archetype install complete "
 echo "+++++++++++++++++++++++++++++++++++++++++++++++"
 }
 

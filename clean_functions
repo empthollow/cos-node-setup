@@ -517,3 +517,111 @@ restore_config
 echo "### cleanup complete ###"
 	
 }
+clean_swift_controller()
+{
+
+# stop and disable swift proxy service
+echo "stopping services..."
+systemctl stop openstack-swift-proxy.service || true
+systemctl disable openstack-swift-proxy.service || true
+
+# remove swift packages
+echo "removing packages..."
+dnf remove -y openstack-swift-proxy python-swiftclient python-keystoneclient python-keystonemiddleware
+
+# restore original configuration files if backups exist
+echo "restoring configs..."
+orig="/etc/swift/proxy-server.conf"
+restore_config
+
+# remove swift directories
+echo "removing directories..."
+rm -rf /etc/swift/proxy-server.conf
+
+# remove database users
+echo "removing database users..."
+# Note: Swift uses its own storage, no database to remove
+
+# remove openstack user and service
+echo "reverting openstack config..."
+srcopenrc
+source $osadmin_project
+openstack user delete swift || true
+source $osadmin_system
+openstack service delete object-store || true
+
+# remove firewall rule
+echo "removing firewall rules..."
+firewall-cmd --permanent --remove-port=8080/tcp || true
+firewall-cmd --reload
+
+echo "### cleanup complete ###"
+}
+
+clean_swift_node()
+{
+
+# stop and disable swift services
+echo "stopping services..."
+systemctl stop rsyncd.service || true
+systemctl stop openstack-swift-account.service || true
+systemctl stop openstack-swift-account-auditor.service || true
+systemctl stop openstack-swift-account-reaper.service || true
+systemctl stop openstack-swift-account-replicator.service || true
+systemctl stop openstack-swift-container.service || true
+systemctl stop openstack-swift-container-auditor.service || true
+systemctl stop openstack-swift-container-replicator.service || true
+systemctl stop openstack-swift-container-updater.service || true
+systemctl stop openstack-swift-object.service || true
+systemctl stop openstack-swift-object-auditor.service || true
+systemctl stop openstack-swift-object-replicator.service || true
+systemctl stop openstack-swift-object-updater.service || true
+
+systemctl disable rsyncd.service || true
+systemctl disable openstack-swift-account.service || true
+systemctl disable openstack-swift-account-auditor.service || true
+systemctl disable openstack-swift-account-reaper.service || true
+systemctl disable openstack-swift-account-replicator.service || true
+systemctl disable openstack-swift-container.service || true
+systemctl disable openstack-swift-container-auditor.service || true
+systemctl disable openstack-swift-container-replicator.service || true
+systemctl disable openstack-swift-container-updater.service || true
+systemctl disable openstack-swift-object.service || true
+systemctl disable openstack-swift-object-auditor.service || true
+systemctl disable openstack-swift-object-replicator.service || true
+systemctl disable openstack-swift-object-updater.service || true
+
+# remove swift packages
+echo "removing packages..."
+dnf remove -y openstack-swift-account openstack-swift-container openstack-swift-object xfsprogs rsync
+
+# restore original configuration files if backups exist
+echo "restoring configs..."
+orig="/etc/fstab"
+restore_config
+orig="/etc/rsyncd.conf"
+restore_config
+
+# unmount swift storage devices
+echo "unmounting storage..."
+umount /srv/node/store1 2>/dev/null || true
+umount /srv/node/store2 2>/dev/null || true
+
+# remove swift directories
+echo "removing directories..."
+rm -rf /srv/node/store1
+rm -rf /srv/node/store2
+rm -rf /var/cache/swift
+rm -rf /etc/swift/account-server.conf
+rm -rf /etc/swift/container-server.conf
+rm -rf /etc/swift/object-server.conf
+
+# remove firewall rules
+echo "removing firewall rules..."
+firewall-cmd --permanent --remove-port=6200/tcp || true
+firewall-cmd --permanent --remove-port=6201/tcp || true
+firewall-cmd --permanent --remove-port=6202/tcp || true
+firewall-cmd --reload
+
+echo "### cleanup complete ###"
+}
