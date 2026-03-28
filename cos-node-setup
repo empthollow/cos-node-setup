@@ -101,7 +101,7 @@ check_prerequisites()
 	echo "======================================================================="
 	
 	# Check required commands
-	local required_cmds=("sed" "dnf" "systemctl" "openssl" "mysql" "crudini")
+	local required_cmds=("sed" "dnf" "systemctl" "openssl" "mysql")
 	for cmd in "${required_cmds[@]}"; do
 		if ! command -v "$cmd" &> /dev/null; then
 			echo "ERROR: Required command '$cmd' not found"
