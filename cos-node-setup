@@ -336,6 +336,8 @@ COMMANDS (can be chained):
   horizon_controller   Install and configure Horizon (Dashboard)
   swift_controller     Install and configure Swift (Object Storage) - Controller
   swift_node           Install and configure Swift - Object Storage Node
+  swift_finalize       Create Swift rings and finalize installation (run on controller)
+  swift_start_services Start Swift services on storage nodes (run after ring distribution)
 
 ARCHETYPES (Full Node Installations):
   controller_archetype      Complete controller node (all controller services)
@@ -370,6 +372,17 @@ USAGE EXAMPLES:
 5. Install Object Storage Node:
    sudo -s ./cos-node-setup objectstorenode_archetype
 
+6. Complete Swift Setup (Multi-Step Process):
+   # On controller (after swift_controller):
+   sudo -s ./cos-node-setup swift_finalize
+   # This creates rings and swift.conf, then prompts to copy files to storage nodes
+   
+   # Copy files to each storage node:
+   scp /etc/swift/*.ring.gz /etc/swift/swift.conf root@storagenode:/etc/swift/
+   
+   # On each storage node (after swift_node):
+   sudo -s ./cos-node-setup swift_start_services
+
 INSTALLATION ORDER:
 
 Controller Node (Sequential):
@@ -399,13 +412,24 @@ Block Storage Node (Sequential):
 Object Storage Node (Sequential):
   1. base_compute_node
   2. swift_node
+  3. (Wait for controller to run swift_finalize)
+  4. (Copy ring files from controller)
+  5. swift_start_services
+
+Swift Finalization (On Controller After All Storage Nodes):
+  1. swift_finalize  (creates rings, generates swift.conf)
+  2. Copy /etc/swift/*.ring.gz and /etc/swift/swift.conf to all storage nodes
+  3. On each storage node: swift_start_services
 
 IMPORTANT NOTES:
 
 - Run as root (sudo -s)
 - Configure network variables before running
 - Controller must be installed before compute nodes
+- Swift requires manual ring distribution: install all storage nodes first, then run
+  swift_finalize on controller, copy ring files to storage nodes, then start services
 - All passwords are auto-generated and saved to openstack_passwords file
+- Swift hash values auto-generated and saved - NEVER change or lose these values
 - Configuration backups are created with .BAK extension
 - Script will EXIT immediately if a service fails to start
 - Debug logging enabled to systemd journal for all services
@@ -535,8 +559,20 @@ RABBIT_PASS=$rabbit_pass
 " >> openstack_passwords
 
 swift_pass=$(openssl rand -hex 10)
-echo "# Password of RabbitMQ user openstack
-SWIFT_PASS=$rabbit_pass
+echo "# Password of Swift service user swift
+SWIFT_PASS=$swift_pass
+
+" >> openstack_passwords
+
+swift_hash_suffix=$(openssl rand -hex 32)
+echo "# Swift hash path suffix (keep secret, never change)
+SWIFT_HASH_PATH_SUFFIX=$swift_hash_suffix
+
+" >> openstack_passwords
+
+swift_hash_prefix=$(openssl rand -hex 32)
+echo "# Swift hash path prefix (keep secret, never change)
+SWIFT_HASH_PATH_PREFIX=$swift_hash_prefix
 
 " >> openstack_passwords
 
@@ -1677,10 +1713,10 @@ echo "adding firewall rules..."
 firewall-cmd --add-port=8080/tcp --permanent
 firewall-cmd --reload
 
-
-# set resume status
+# Note: Services will be started in swift_finalize after rings are created
+echo "### swift controller components installed ###"
+echo "Note: Run swift_finalize after all storage nodes are configured to create rings and start services"
 sed -i /swiftctrlstat/s/1/0/ resume_status
-echo "### swift install complete ###"
 }
 
 swift_node()
@@ -1718,7 +1754,7 @@ echo "uid = swift
 gid = swift
 log file = /var/log/rsyncd.log
 pid file = /var/run/rsyncd.pid
-address = $objectsoreip
+address = $objectstoreip
 
 [account]
 max connections = 2
@@ -1756,35 +1792,161 @@ sed -i -e "/^\[filter:recon\]/,/^\[/{/egg:swift#recon/a recon_cache_path = /var/
 
 # container-server.conf
 sed -i -e "/^\[DEFAULT\]/,/^\[/{/bind_port/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True}" /etc/swift/container-server.conf
-sed -i -e "/^\[pipeline:main\]/,/^\[/{s/backend_ratelimit\ //}" /etc/swift/containter-server.conf
-sed -i -e "/^\[filter:recon\]/,/^\[/{/egg:swift#recon/a recon_cache_path = /var/cache/swift}" /etc/swift/account-server.conf
+sed -i -e "/^\[pipeline:main\]/,/^\[/{s/backend_ratelimit\ //}" /etc/swift/container-server.conf
+sed -i -e "/^\[filter:recon\]/,/^\[/{/egg:swift#recon/a recon_cache_path = /var/cache/swift}" /etc/swift/container-server.conf
 
 # object-server.conf
 sed -i -e "/^\[DEFAULT\]/,/^\[/{/bind_port/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True}" /etc/swift/object-server.conf
 sed -i -e "/^\[pipeline:main\]/,/^\[/{s/backend_ratelimit\ //}" /etc/swift/object-server.conf
 sed -i -e "/^\[filter:recon\]/,/^\[/{/egg:swift#recon/a recon_cache_path = /var/cache/swift\nrecon_lock_path = /var/lock}" /etc/swift/object-server.conf
 
+# mount storage devices
+echo "mounting storage devices..."
+mount /srv/node/store1
+mount /srv/node/store2
+
 # permissions
 chown -R swift:swift /srv/node
 mkdir -p /var/cache/swift
 chown -R root:swift /var/cache/swift
 chmod -R 775 /var/cache/swift
+
+# add firewall rules
 firewall-cmd --permanent --add-port=6200/tcp
 firewall-cmd --permanent --add-port=6201/tcp
 firewall-cmd --permanent --add-port=6202/tcp
+firewall-cmd --reload
 
+echo "### swift storage node components installed ###"
+echo "Note: Waiting for ring files and swift.conf from controller"
+echo "Note: Services will be started in swift_finalize after ring distribution"
 sed -i /swiftnodestat/s/1/0/ resume_status
-echo "### swift install complete ###"
 }
 
-swift_init_rings_node()
+swift_finalize()
 {
-cd /etc/swift
-swift-ring-builder account.builder create 10 3 1
-swift-ring-builder account.builder add --region 1 --zone 1 --ip STORAGE_NODE_MANAGEMENT_INTERFACE_IP_ADDRESS --port 6202 \
- --device DEVICE_NAME --weight DEVICE_WEIGHT
+# Finalize Swift installation - create rings, swift.conf, and start services
+# This should be run on the controller after all storage nodes are configured
+stage="swift finalize"
 
-echo "### swift init rings install complete ###"
+echo "==============================================="
+echo "      finalizing swift installation"
+echo "==============================================="
+
+# Create rings on controller
+echo "creating swift rings..."
+cd /etc/swift
+
+# Set default replica count if not specified
+[ -z "$swift_replicas" ] && swift_replicas=3
+
+echo "Creating rings with $swift_replicas replicas..."
+
+# Create account ring
+swift-ring-builder account.builder create 10 $swift_replicas 1
+# Add storage devices to account ring (customize based on your storage nodes)
+for storageip in $swiftstoragenodes; do
+	swift-ring-builder account.builder add --region 1 --zone 1 --ip $storageip --port 6202 --device store1 --weight 100
+	swift-ring-builder account.builder add --region 1 --zone 1 --ip $storageip --port 6202 --device store2 --weight 100
+done
+swift-ring-builder account.builder rebalance
+
+# Create container ring
+swift-ring-builder container.builder create 10 $swift_replicas 1
+# Add storage devices to container ring
+for storageip in $swiftstoragenodes; do
+	swift-ring-builder container.builder add --region 1 --zone 1 --ip $storageip --port 6201 --device store1 --weight 100
+	swift-ring-builder container.builder add --region 1 --zone 1 --ip $storageip --port 6201 --device store2 --weight 100
+done
+swift-ring-builder container.builder rebalance
+
+# Create object ring
+swift-ring-builder object.builder create 10 $swift_replicas 1
+# Add storage devices to object ring
+for storageip in $swiftstoragenodes; do
+	swift-ring-builder object.builder add --region 1 --zone 1 --ip $storageip --port 6200 --device store1 --weight 100
+	swift-ring-builder object.builder add --region 1 --zone 1 --ip $storageip --port 6200 --device store2 --weight 100
+done
+swift-ring-builder object.builder rebalance
+
+# Create swift.conf
+echo "creating swift.conf..."
+curl -o /etc/swift/swift.conf https://opendev.org/openstack/swift/raw/branch/master/etc/swift.conf-sample
+
+# Load hash values from password file if they exist
+[ -e "openstack_passwords" ] && . openstack_passwords
+
+# Use existing hash values or generate new ones
+if [ -z "$SWIFT_HASH_PATH_SUFFIX" ]; then
+	SWIFT_HASH_PATH_SUFFIX=$(openssl rand -hex 32)
+	echo "Generated new SWIFT_HASH_PATH_SUFFIX (save this value!)"
+fi
+if [ -z "$SWIFT_HASH_PATH_PREFIX" ]; then
+	SWIFT_HASH_PATH_PREFIX=$(openssl rand -hex 32)
+	echo "Generated new SWIFT_HASH_PATH_PREFIX (save this value!)"
+fi
+
+# Configure swift.conf
+sed -i "/^\[swift-hash\]/a swift_hash_path_suffix = $SWIFT_HASH_PATH_SUFFIX\nswift_hash_path_prefix = $SWIFT_HASH_PATH_PREFIX" /etc/swift/swift.conf
+sed -i '/^\[storage-policy:0\]/,/^\[/{/^name/d; /^default/d}' /etc/swift/swift.conf
+sed -i '/^\[storage-policy:0\]/a name = Policy-0\ndefault = yes' /etc/swift/swift.conf
+
+# Set ownership
+chown -R root:swift /etc/swift
+
+echo "Ring files and swift.conf created."
+echo "You must now copy the following files to ALL storage nodes:"
+echo "  - /etc/swift/account.ring.gz"
+echo "  - /etc/swift/container.ring.gz"
+echo "  - /etc/swift/object.ring.gz"
+echo "  - /etc/swift/swift.conf"
+echo ""
+echo "Example: scp /etc/swift/*.ring.gz /etc/swift/swift.conf root@storagenode:/etc/swift/"
+echo "Then run on each storage node: chown -R root:swift /etc/swift"
+echo ""
+read -p "Press enter after copying files to all storage nodes to start services..."
+
+# Start controller proxy service
+echo "starting swift proxy service on controller..."
+systemctl enable openstack-swift-proxy.service memcached.service
+systemctl start openstack-swift-proxy.service
+
+echo "### swift finalization complete on controller ###"
+echo "Now start services on each storage node with: cos-node-setup swift_start_services"
+}
+
+swift_start_services()
+{
+# Start Swift storage services on storage nodes
+# Run this on each storage node after ring files are distributed
+stage="swift start services"
+
+echo "==============================================="
+echo "      starting swift storage services"
+echo "==============================================="
+
+# Verify ring files exist
+if [ ! -f /etc/swift/account.ring.gz ] || [ ! -f /etc/swift/container.ring.gz ] || [ ! -f /etc/swift/object.ring.gz ] || [ ! -f /etc/swift/swift.conf ]; then
+	echo "ERROR: Ring files or swift.conf not found in /etc/swift/"
+	echo "Please copy them from the controller node first."
+	exit 1
+fi
+
+# Set ownership
+chown -R root:swift /etc/swift
+
+# Start services
+echo "enabling and starting swift services..."
+systemctl enable openstack-swift-account.service openstack-swift-account-auditor.service openstack-swift-account-reaper.service openstack-swift-account-replicator.service
+systemctl start openstack-swift-account.service openstack-swift-account-auditor.service openstack-swift-account-reaper.service openstack-swift-account-replicator.service
+
+systemctl enable openstack-swift-container.service openstack-swift-container-auditor.service openstack-swift-container-replicator.service openstack-swift-container-updater.service
+systemctl start openstack-swift-container.service openstack-swift-container-auditor.service openstack-swift-container-replicator.service openstack-swift-container-updater.service
+
+systemctl enable openstack-swift-object.service openstack-swift-object-auditor.service openstack-swift-object-replicator.service openstack-swift-object-updater.service
+systemctl start openstack-swift-object.service openstack-swift-object-auditor.service openstack-swift-object-replicator.service openstack-swift-object-updater.service
+
+echo "### swift storage services started ###"
 }
 
 heat_controller()

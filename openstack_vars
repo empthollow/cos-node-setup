@@ -30,5 +30,13 @@ providercidrip=172.22.2.21/24
 #swift
 storagedev1=/dev/sdb
 storagedev2=/dev/sdc
+# space-separated list of swift storage node IPs for ring creation
+swiftstoragenodes="$objectstoreip"
+# Swift replica count (3 for production, 2 for testing with single node)
+swift_replicas=2
+# Swift hash values (will be auto-generated if not set)
+# IMPORTANT: Keep these secret and never change them after initial setup
+SWIFT_HASH_PATH_SUFFIX=""
+SWIFT_HASH_PATH_PREFIX=""
 
 
