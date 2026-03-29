@@ -940,7 +940,7 @@ echo "configuring openstack..."
 # System-scoped operations: project, user, role
 source $osadmin_system
 openstack project create --or-show service
-openstack user create --domain default --password $GLANCE_PASS glance
+openstack user list | grep -cw glance || openstack user create --domain default --password $GLANCE_PASS glance
 openstack role add --project service --user glance admin
 openstack role add --project service --user glance service
 openstack role add --user glance --user-domain Default --system all reader
@@ -1063,7 +1063,7 @@ srcopenrc
 # System-scoped operations: project, user, role
 source $osadmin_system
 openstack project create --or-show service
-openstack user create --domain default --password $NOVA_PASS nova
+openstack user list | grep -cw nova || openstack user create --domain default --password $NOVA_PASS nova
 openstack role add --project service --user nova admin
 openstack role add --project service --user nova service
 
@@ -1217,7 +1217,7 @@ srcopenrc
 # System-scoped operations: project, user, role
 source $osadmin_system
 openstack project create --or-show service
-openstack user create --domain default --password $CINDER_PASS cinder
+openstack user list | grep -cw cinder || openstack user create --domain default --password $CINDER_PASS cinder
 openstack role add --project service --user cinder admin
 openstack role add --project service --user cinder service
 # System-scoped operations: service, endpoint
@@ -1434,7 +1434,7 @@ srcopenrc
 # System-scoped operations: project, user, role
 source $osadmin_system
 openstack project create --or-show service
-openstack user create --domain default --password $NEUTRON_PASS neutron
+openstack user list | grep -cw neutron || openstack user create --domain default --password $NEUTRON_PASS neutron
 openstack role add --project service --user neutron admin
 openstack role add --project service --user neutron service
 # System-scoped operations: service, endpoint
@@ -1683,7 +1683,7 @@ srcopenrc
 # System-scoped operations: project, user, role
 source $osadmin_system
 openstack project create --or-show service
-openstack user create --domain default --password $SWIFT_PASS swift
+openstack user list | grep -cw swift || openstack user create --domain default --password $SWIFT_PASS swift
 openstack role add --project service --user swift admin
 openstack role add --project service --user swift service
 # System-scoped operations: service, endpoint
