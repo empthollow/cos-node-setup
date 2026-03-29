@@ -1684,10 +1684,19 @@ srcopenrc
 source $osadmin_system
 openstack project create --or-show service
 openstack user list | grep -cw swift || openstack user create --domain default --password $SWIFT_PASS swift
-openstack role add --project service --user swift admin
-openstack role add --project service --user swift service
+openstack role add --project service --user swift admin 2>/dev/null || echo "Role admin already assigned to swift"
+openstack role add --project service --user swift service 2>/dev/null || echo "Role service already assigned to swift"
 # System-scoped operations: service, endpoint
+# Check if swift service already exists, if so delete it to recreate
+if openstack service show swift &>/dev/null; then
+	echo "Swift service already exists, deleting to recreate..."
+	openstack service delete swift
+fi
 openstack service create --name swift --description "OpenStack Object Storage" object-store
+# Delete existing endpoints if any to avoid duplicates
+for endpoint_type in public internal admin; do
+	openstack endpoint list --service swift --interface $endpoint_type -f value -c ID 2>/dev/null | xargs -r openstack endpoint delete
+done
 openstack endpoint create --region RegionOne object-store public http://controller:8080/v1/AUTH_%\(project_id\)s
 openstack endpoint create --region RegionOne object-store internal http://controller:8080/v1/AUTH_%\(project_id\)s
 openstack endpoint create --region RegionOne object-store admin http://controller:8080/v1
@@ -1738,8 +1747,17 @@ echo "installing swift packages..."
 dnf install -y xfsprogs rsync
 
 echo "formatting storage..."
-mkfs.xfs $storagedev1
-mkfs.xfs $storagedev2
+# Check if already formatted, force if needed
+if blkid $storagedev1 | grep -q xfs; then
+	echo "Warning: $storagedev1 already has XFS filesystem, skipping format"
+else
+	mkfs.xfs $storagedev1
+fi
+if blkid $storagedev2 | grep -q xfs; then
+	echo "Warning: $storagedev2 already has XFS filesystem, skipping format"
+else
+	mkfs.xfs $storagedev2
+fi
 
 mkdir -p /srv/node/store1
 mkdir -p /srv/node/store2
@@ -1841,6 +1859,11 @@ echo "==============================================="
 echo "creating swift rings..."
 cd /etc/swift
 
+# Remove existing ring builders if present (for re-runs)
+rm -f account.builder account.ring.gz
+rm -f container.builder container.ring.gz
+rm -f object.builder object.ring.gz
+
 # Set default replica count if not specified
 [ -z "$swift_replicas" ] && swift_replicas=3
 
@@ -1875,6 +1898,10 @@ swift-ring-builder object.builder rebalance
 
 # Create swift.conf
 echo "creating swift.conf..."
+if [ -f /etc/swift/swift.conf ]; then
+	echo "swift.conf already exists, backing up..."
+	cp /etc/swift/swift.conf /etc/swift/swift.conf.bak.$(date +%s)
+fi
 curl -o /etc/swift/swift.conf https://opendev.org/openstack/swift/raw/branch/master/etc/swift.conf-sample
 
 # Load hash values from password file if they exist

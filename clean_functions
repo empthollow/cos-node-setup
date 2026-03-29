@@ -545,10 +545,9 @@ echo "removing database users..."
 # remove openstack user and service
 echo "reverting openstack config..."
 srcopenrc
-source $osadmin_project
-openstack user delete swift || true
 source $osadmin_system
-openstack service delete object-store || true
+openstack user delete swift || true
+openstack service delete swift || true
 
 # remove firewall rule
 echo "removing firewall rules..."
