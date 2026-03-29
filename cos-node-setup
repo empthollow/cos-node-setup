@@ -1689,7 +1689,7 @@ openstack role add --project service --user swift service 2>/dev/null || echo "R
 # System-scoped operations: service, endpoint
 # Delete any existing object-store services and their endpoints
 echo "Checking for existing object-store services..."
-for service_id in $(openstack service list --type object-store -f value -c ID 2>/dev/null); do
+for service_id in $(openstack service list -f value -c ID -c Type 2>/dev/null | grep object-store | awk '{print $1}'); do
 	echo "Found existing object-store service (ID: $service_id), deleting endpoints and service..."
 	# Delete all endpoints for this service
 	for endpoint_id in $(openstack endpoint list --service $service_id -f value -c ID 2>/dev/null); do
@@ -1698,10 +1698,11 @@ for service_id in $(openstack service list --type object-store -f value -c ID 2>
 	# Delete the service
 	openstack service delete $service_id 2>/dev/null || true
 done
-openstack service create --name swift --description "OpenStack Object Storage" object-store
-openstack endpoint create --region RegionOne object-store public http://controller:8080/v1/AUTH_%\(project_id\)s
-openstack endpoint create --region RegionOne object-store internal http://controller:8080/v1/AUTH_%\(project_id\)s
-openstack endpoint create --region RegionOne object-store admin http://controller:8080/v1
+# Create swift service and capture the ID
+SWIFT_SERVICE_ID=$(openstack service create --name swift --description "OpenStack Object Storage" object-store -f value -c id)
+openstack endpoint create --region RegionOne $SWIFT_SERVICE_ID public http://controller:8080/v1/AUTH_%\(project_id\)s
+openstack endpoint create --region RegionOne $SWIFT_SERVICE_ID internal http://controller:8080/v1/AUTH_%\(project_id\)s
+openstack endpoint create --region RegionOne $SWIFT_SERVICE_ID admin http://controller:8080/v1
 
 # install and configure components
 echo "installing swift packages..."
