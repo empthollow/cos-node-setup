@@ -1704,12 +1704,13 @@ save_config
 sed -i '/^\[DEFAULT\]/,/^\[/{/^[^#|\[]/s/^/#\ /g}' /etc/swift/proxy-server.conf
 sed -i "/^\[DEFAULT\]/a bind_port = 8080\nuser = swift\nswift_dir = /etc/swift" /etc/swift/proxy-server.conf
 sed -i '/^\[pipeline:main\]/,/^\[/{/^[^#|\[]/s/tempurl/authtoken\ keystoneauth/; /^[^#|\[]/s/tempauth//}' /etc/swift/proxy-server.conf
-sed -i -e '/^\[app:proxy-server\]/,/^\[/{/egg:swift#proxy/a account_autocreate = True}' /etc/swift/proxy-server.conf
-sed -i -e '/\[filter:keystoneauth\]/s/^#\ //' /etc/swift/proxy-server.conf
-sed -i -e '/egg:swift#keystoneauth/{s/^#\ //' -e 'a operator_roles = admin,user}' /etc/swift/proxy-server.conf
-sed -i -e '/\[filter:authtoken\]/s/^#\ //' /etc/swift/proxy-server.conf
-sed -i -e "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware.auth_token:filter_factory\nwww_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_id = default\nuser_domain_id = default\nproject_name = service\nusername = swift\npassword = $SWIFT_PASS\n delay_auth_decision = True" /etc/swift/proxy-server.conf
-sed -i -e '/^\[filter:cache\]/,/^\[/{/egg:swift#memcache/a memcache_servers = controller:11211}' /etc/swift/proxy-server.conf
+sed -i '/egg:swift#proxy/a account_autocreate = True' /etc/swift/proxy-server.conf
+sed -i '/\[filter:keystoneauth\]/s/^#\ //' /etc/swift/proxy-server.conf
+sed -i '/egg:swift#keystoneauth/s/^#\ //' /etc/swift/proxy-server.conf
+sed -i '/egg:swift#keystoneauth/a operator_roles = admin,user' /etc/swift/proxy-server.conf
+sed -i '/\[filter:authtoken\]/s/^#\ //' /etc/swift/proxy-server.conf
+sed -i "/^\[filter:authtoken\]/a paste.filter_factory = keystonemiddleware.auth_token:filter_factory\nwww_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_id = default\nuser_domain_id = default\nproject_name = service\nusername = swift\npassword = $SWIFT_PASS\n delay_auth_decision = True" /etc/swift/proxy-server.conf
+sed -i '/egg:swift#memcache/a memcache_servers = controller:11211' /etc/swift/proxy-server.conf
 
 # add firewall rules
 echo "adding firewall rules..."
@@ -1789,19 +1790,19 @@ curl -o /etc/swift/container-server.conf https://opendev.org/openstack/swift/raw
 curl -o /etc/swift/object-server.conf https://opendev.org/openstack/swift/raw/branch/master/etc/object-server.conf-sample
 
 # account-server.conf file
-sed -i -e "/^\[DEFAULT\]/,/^\[/{/bind_ip/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True}" /etc/swift/account-server.conf
-sed -i -e "/^\[pipeline:main\]/,/^\[/{s/backend_ratelimit\ //}" /etc/swift/account-server.conf
-sed -i -e "/^\[filter:recon\]/,/^\[/{/egg:swift#recon/a recon_cache_path = /var/cache/swift}" /etc/swift/account-server.conf
+sed -i "/^\[DEFAULT\]/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True" /etc/swift/account-server.conf
+sed -i 's/pipeline = .* backend_ratelimit /pipeline = /' /etc/swift/account-server.conf
+sed -i "/^\[filter:recon\]/a recon_cache_path = /var/cache/swift" /etc/swift/account-server.conf
 
 # container-server.conf
-sed -i -e "/^\[DEFAULT\]/,/^\[/{/bind_port/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True}" /etc/swift/container-server.conf
-sed -i -e "/^\[pipeline:main\]/,/^\[/{s/backend_ratelimit\ //}" /etc/swift/container-server.conf
-sed -i -e "/^\[filter:recon\]/,/^\[/{/egg:swift#recon/a recon_cache_path = /var/cache/swift}" /etc/swift/container-server.conf
+sed -i "/^\[DEFAULT\]/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True" /etc/swift/container-server.conf
+sed -i 's/pipeline = .* backend_ratelimit /pipeline = /' /etc/swift/container-server.conf
+sed -i "/^\[filter:recon\]/a recon_cache_path = /var/cache/swift" /etc/swift/container-server.conf
 
 # object-server.conf
-sed -i -e "/^\[DEFAULT\]/,/^\[/{/bind_port/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True}" /etc/swift/object-server.conf
-sed -i -e "/^\[pipeline:main\]/,/^\[/{s/backend_ratelimit\ //}" /etc/swift/object-server.conf
-sed -i -e "/^\[filter:recon\]/,/^\[/{/egg:swift#recon/a recon_cache_path = /var/cache/swift\nrecon_lock_path = /var/lock}" /etc/swift/object-server.conf
+sed -i "/^\[DEFAULT\]/a bind_ip = $objectstoreip\nuser = swift\nswift_dir = /etc/swift\ndevices = /srv/node\nmount_check = True" /etc/swift/object-server.conf
+sed -i 's/pipeline = .* backend_ratelimit /pipeline = /' /etc/swift/object-server.conf
+sed -i "/^\[filter:recon\]/a recon_cache_path = /var/cache/swift\nrecon_lock_path = /var/lock" /etc/swift/object-server.conf
 
 # mount storage devices
 echo "mounting storage devices..."
@@ -1891,7 +1892,7 @@ fi
 
 # Configure swift.conf
 sed -i "/^\[swift-hash\]/a swift_hash_path_suffix = $SWIFT_HASH_PATH_SUFFIX\nswift_hash_path_prefix = $SWIFT_HASH_PATH_PREFIX" /etc/swift/swift.conf
-sed -i '/^\[storage-policy:0\]/,/^\[/{/^name/d; /^default/d}' /etc/swift/swift.conf
+sed -i '/^\[storage-policy:0\]/,/^\[/{/^name.*=.*/d; /^default.*=.*/d;}' /etc/swift/swift.conf
 sed -i '/^\[storage-policy:0\]/a name = Policy-0\ndefault = yes' /etc/swift/swift.conf
 
 # Set ownership
