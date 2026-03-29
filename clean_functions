@@ -546,8 +546,17 @@ echo "removing database users..."
 echo "reverting openstack config..."
 srcopenrc
 source $osadmin_system
-openstack user delete swift || true
-openstack service delete swift || true
+openstack user delete swift 2>/dev/null || true
+# Delete all object-store services (handles duplicates)
+for service_id in $(openstack service list -f value 2>/dev/null | awk '$3 == "object-store" {print $1}'); do
+	echo "Deleting object-store service (ID: $service_id)..."
+	# Delete all endpoints for this service
+	for endpoint_id in $(openstack endpoint list --service $service_id -f value -c ID 2>/dev/null); do
+		openstack endpoint delete $endpoint_id 2>/dev/null || true
+	done
+	# Delete the service
+	openstack service delete $service_id 2>/dev/null || true
+done
 
 # remove firewall rule
 echo "removing firewall rules..."
