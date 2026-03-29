@@ -607,7 +607,10 @@ else
 		echo "creating $myuser and RBAC-compliant admin openrc auth files "
 		echo "==========================================================="
 		# Create admin-system-openrc for system-scoped operations
-		echo "export OS_PROJECT_DOMAIN_NAME=Default
+		echo "# Clear project-scoped variables before setting system scope
+unset OS_PROJECT_NAME
+unset OS_PROJECT_ID
+export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_SYSTEM_SCOPE=all
 export OS_USERNAME=admin
@@ -620,7 +623,9 @@ export OS_IMAGE_API_VERSION=2" > admin-system-openrc
 		echo "  Use for: endpoint list, hypervisor list, service list"
 		echo "==========================================================="
 		# Create admin-project-openrc for project-scoped operations
-		echo "export OS_PROJECT_DOMAIN_NAME=Default
+		echo "# Clear system-scoped variables before setting project scope
+unset OS_SYSTEM_SCOPE
+export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=admin
 export OS_USERNAME=admin
@@ -932,15 +937,17 @@ mysql -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' \
 
 srcopenrc
 echo "configuring openstack..."
-# Project-scoped operations: user, project, role
-source $osadmin_project
-openstack user create --domain default --password $GLANCE_PASS glance
+# System-scoped operations: project, user
+source $osadmin_system
 openstack project create --or-show service
+openstack user create --domain default --password $GLANCE_PASS glance
+# Project-scoped operations: role assignment
+source $osadmin_project
 openstack role add --project service --user glance admin
 openstack role add --project service --user glance service
-openstack role add --user glance --user-domain Default --system all reader
-# System-scoped operations: service, endpoint
+# System-scoped operations: system role, service, endpoint
 source $osadmin_system
+openstack role add --user glance --user-domain Default --system all reader
 openstack service create --name glance --description "OpenStack Image" image
 openstack endpoint create --region RegionOne image public http://controller:9292
 openstack endpoint create --region RegionOne image internal http://controller:9292
@@ -994,12 +1001,12 @@ mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '
 
 echo "configuring openstack..."
 srcopenrc
-# System-scoped operations: project
+# System-scoped operations: project, user
 source $osadmin_system
 openstack project create --or-show service
-# Project-scoped operations: user, role
-source $osadmin_project
 openstack user list | grep -cw placement || openstack user create --domain default --password $PLACEMENT_PASS placement
+# Project-scoped operations: role assignment
+source $osadmin_project
 openstack role add --project service --user placement admin
 openstack role add --project service --user placement service
 # System-scoped operations: service, endpoint
@@ -1059,11 +1066,17 @@ mysql -e "GRANT ALL PRIVILEGES ON nova_cell0.* TO 'nova'@'%' \
 # adding nova user
 echo "configuring openstack..."
 srcopenrc
+# System-scoped operations: project, user
+source $osadmin_system
 openstack project create --or-show service
 openstack user create --domain default --password $NOVA_PASS nova
+# Project-scoped operations: role assignment
+source $osadmin_project
 openstack role add --project service --user nova admin
 openstack role add --project service --user nova service
 
+# System-scoped operations: service, endpoint
+source $osadmin_system
 # creating nova services
 openstack service create --name nova --description "OpenStack Compute" compute
 
@@ -1210,12 +1223,12 @@ mysql -e "GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY '$CINDE
 # openstack setup
 echo "configuring openstack..."
 srcopenrc
-# System-scoped operations: project
+# System-scoped operations: project, user
 source $osadmin_system
 openstack project create --or-show service
-# Project-scoped operations: user, role
-source $osadmin_project
 openstack user create --domain default --password $CINDER_PASS cinder
+# Project-scoped operations: role assignment
+source $osadmin_project
 openstack role add --project service --user cinder admin
 openstack role add --project service --user cinder service
 # System-scoped operations: service, endpoint
@@ -1430,12 +1443,12 @@ mysql -e "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY '$NEU
 # configure openstack
 echo "configuring openstack..."
 srcopenrc
-# System-scoped operations: project
+# System-scoped operations: project, user
 source $osadmin_system
 openstack project create --or-show service
-# Project-scoped operations: user, role
-source $osadmin_project
 openstack user create --domain default --password $NEUTRON_PASS neutron
+# Project-scoped operations: role assignment
+source $osadmin_project
 openstack role add --project service --user neutron admin
 openstack role add --project service --user neutron service
 # System-scoped operations: service, endpoint
@@ -1682,12 +1695,12 @@ echo "==============================================="
 # create openstack sift user and services
 echo "configuring openstack..."
 srcopenrc
-# System-scoped operations: project
+# System-scoped operations: project, user
 source $osadmin_system
 openstack project create --or-show service
-# Project-scoped operations: user, role
-source $osadmin_project
 openstack user create --domain default --password $SWIFT_PASS swift
+# Project-scoped operations: role assignment
+source $osadmin_project
 openstack role add --project service --user swift admin
 openstack role add --project service --user swift service
 # System-scoped operations: service, endpoint
