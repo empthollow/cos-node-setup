@@ -994,9 +994,11 @@ mysql -e "GRANT ALL PRIVILEGES ON placement.* TO 'placement'@'%' IDENTIFIED BY '
 
 echo "configuring openstack..."
 srcopenrc
-# Project-scoped operations: user, project, role
-source $osadmin_project
+# System-scoped operations: project
+source $osadmin_system
 openstack project create --or-show service
+# Project-scoped operations: user, role
+source $osadmin_project
 openstack user list | grep -cw placement || openstack user create --domain default --password $PLACEMENT_PASS placement
 openstack role add --project service --user placement admin
 openstack role add --project service --user placement service
@@ -1208,9 +1210,11 @@ mysql -e "GRANT ALL PRIVILEGES ON cinder.* TO 'cinder'@'%' IDENTIFIED BY '$CINDE
 # openstack setup
 echo "configuring openstack..."
 srcopenrc
-# Project-scoped operations: user, project, role
-source $osadmin_project
+# System-scoped operations: project
+source $osadmin_system
 openstack project create --or-show service
+# Project-scoped operations: user, role
+source $osadmin_project
 openstack user create --domain default --password $CINDER_PASS cinder
 openstack role add --project service --user cinder admin
 openstack role add --project service --user cinder service
@@ -1426,9 +1430,11 @@ mysql -e "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY '$NEU
 # configure openstack
 echo "configuring openstack..."
 srcopenrc
-# Project-scoped operations: user, project, role
-source $osadmin_project
+# System-scoped operations: project
+source $osadmin_system
 openstack project create --or-show service
+# Project-scoped operations: user, role
+source $osadmin_project
 openstack user create --domain default --password $NEUTRON_PASS neutron
 openstack role add --project service --user neutron admin
 openstack role add --project service --user neutron service
@@ -1676,9 +1682,11 @@ echo "==============================================="
 # create openstack sift user and services
 echo "configuring openstack..."
 srcopenrc
-# Project-scoped operations: user, project, role
-source $osadmin_project
+# System-scoped operations: project
+source $osadmin_system
 openstack project create --or-show service
+# Project-scoped operations: user, role
+source $osadmin_project
 openstack user create --domain default --password $SWIFT_PASS swift
 openstack role add --project service --user swift admin
 openstack role add --project service --user swift service
