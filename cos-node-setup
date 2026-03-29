@@ -594,7 +594,7 @@ if [ -e "admin-system-openrc" ] && [ -e "admin-project-openrc" ]; then
 	sleep 2
 else
 	echo -n "specify path (if no, files will be created) [y/n] >"
-	read -t 5 specifypath || specifypath="n"
+	read -t 30 specifypath || specifypath="n"
 	if [ "$specifypath" == "y" ]; then  
 		echo -n "enter path of admin-system-openrc (for endpoint/hypervisor/service list) > "
 		read osadmin_system
