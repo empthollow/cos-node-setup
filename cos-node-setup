@@ -1687,16 +1687,17 @@ openstack user list | grep -cw swift || openstack user create --domain default -
 openstack role add --project service --user swift admin 2>/dev/null || echo "Role admin already assigned to swift"
 openstack role add --project service --user swift service 2>/dev/null || echo "Role service already assigned to swift"
 # System-scoped operations: service, endpoint
-# Check if swift service already exists, if so delete it to recreate
+# Check if swift service already exists, if so delete endpoints and service to recreate
 if openstack service show swift &>/dev/null; then
-	echo "Swift service already exists, deleting to recreate..."
+	echo "Swift service already exists, deleting endpoints and service to recreate..."
+	# Delete existing endpoints first
+	for endpoint_type in public internal admin; do
+		openstack endpoint list --service swift --interface $endpoint_type -f value -c ID 2>/dev/null | xargs -r openstack endpoint delete
+	done
+	# Then delete the service
 	openstack service delete swift
 fi
 openstack service create --name swift --description "OpenStack Object Storage" object-store
-# Delete existing endpoints if any to avoid duplicates
-for endpoint_type in public internal admin; do
-	openstack endpoint list --service swift --interface $endpoint_type -f value -c ID 2>/dev/null | xargs -r openstack endpoint delete
-done
 openstack endpoint create --region RegionOne object-store public http://controller:8080/v1/AUTH_%\(project_id\)s
 openstack endpoint create --region RegionOne object-store internal http://controller:8080/v1/AUTH_%\(project_id\)s
 openstack endpoint create --region RegionOne object-store admin http://controller:8080/v1
