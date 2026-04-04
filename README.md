@@ -95,6 +95,42 @@ For releases **before Dalmatian**, you need to enable custom policy files for No
 - `resume_status` - Track installation progress
 - `clean_functions` - Cleanup/rollback functions
 
+## Utility Scripts
+
+### flavors
+
+Creates standard OpenStack compute flavors after deployment:
+
+```bash
+./flavors
+```
+
+This script creates five standard flavors:
+- **m1.tiny** - 512 MB RAM, 1 vCPU, 5 GB disk
+- **m1.small** - 2 GB RAM, 1 vCPU, 20 GB disk
+- **m1.medium** - 4 GB RAM, 2 vCPUs, 40 GB disk
+- **m1.large** - 8 GB RAM, 4 vCPUs, 80 GB disk
+- **m1.xlarge** - 16 GB RAM, 8 vCPUs, 160 GB disk
+
+Run this after completing the controller node installation to make instance flavors available to users.
+
+### gp
+
+Git push helper script for repository maintainers:
+
+```bash
+./gp
+```
+
+This script:
+1. Verifies GitHub SSH authentication
+2. Prompts for a commit message
+3. Stages all changes (`git add .`)
+4. Commits with your message
+5. Pushes to `origin/main`
+
+**Note**: This is a development convenience script for repository maintainers only. End users deploying OpenStack do not need to use this.
+
 ## Support
 
 This script uses RBAC-compliant authentication with `enforce_scope=true` in Keystone. Make sure you understand system-scoped vs project-scoped credentials before deployment.

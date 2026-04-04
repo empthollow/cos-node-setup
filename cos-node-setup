@@ -1017,6 +1017,22 @@ sed -i "/\[DEFAULT\]/a log_level = debug\nuse_journal = True" /etc/placement/pla
 sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
 sed -i "/^\[keystone_authtoken\]/a auth_url = $KEYSTONE_V3_ENDPOINT \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
+# Configure oslo_policy for RBAC
+sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/placement/placement.conf
+# For pre-Dalmatian releases (Bobcat, Caracal): Create policy file and enable it
+# Create policy example file (renamed to .example to prevent auto-loading)
+cat > /etc/placement/policy.json.example << 'PLACEMENTPOLICY'
+{
+  "role:reader": "role:reader and system_scope:all",
+  "role:member": "role:member and system_scope:all",
+  "role:admin": "role:admin and system_scope:all"
+}
+PLACEMENTPOLICY
+chown placement:placement /etc/placement/policy.json.example
+chmod 640 /etc/placement/policy.json.example
+# For pre-Dalmatian (Bobcat/Caracal), uncomment these lines:
+# cp /etc/placement/policy.json.example /etc/placement/policy.json
+# sed -i "/^\[oslo_policy\]/a policy_file = /etc/placement/policy.json" /etc/placement/placement.conf
 orig="/etc/httpd/conf.d/00-placement-api.conf"
 sed -i '/^<Virtual/a \ \ <Directory /usr/bin>\n\tRequire all granted \n\ \ </Directory>' /etc/httpd/conf.d/00-placement-api.conf
 echo "adding firewall rules..."
@@ -1094,6 +1110,22 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.c
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
 # sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
+# Configure oslo_policy for RBAC
+sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/nova/nova.conf
+# For pre-Dalmatian releases (Bobcat, Caracal): Create policy file and enable it
+# Create policy example file (renamed to .example to prevent auto-loading)
+cat > /etc/nova/policy.yaml.example << 'NOVAPOLICY'
+---
+# Nova RBAC Policy - Scope-aware
+"role:reader": "role:reader and system_scope:all"
+"role:member": "role:member and system_scope:all"
+"role:admin": "role:admin and system_scope:all"
+NOVAPOLICY
+chown nova:nova /etc/nova/policy.yaml.example
+chmod 640 /etc/nova/policy.yaml.example
+# For pre-Dalmatian (Bobcat/Caracal), uncomment these lines:
+# cp /etc/nova/policy.yaml.example /etc/nova/policy.yaml
+# sed -i "/^\[oslo_policy\]/a policy_file = /etc/nova/policy.yaml" /etc/nova/nova.conf
 echo "adding firewall rules..."
 firewall-cmd --add-port=8774/tcp --permanent
 firewall-cmd --add-port=6080/tcp --permanent
@@ -1160,6 +1192,22 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.c
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[libvirt\]/a virt_type = kvm\nvideo_image_meta_model = vga\nhw_machine_type = x86_64=q35\ncpu_mode = host-passthrough" /etc/nova/nova.conf
 sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
+# Configure oslo_policy for RBAC
+sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/nova/nova.conf
+# For pre-Dalmatian releases (Bobcat, Caracal): Create policy file and enable it
+# Create policy example file (renamed to .example to prevent auto-loading)
+cat > /etc/nova/policy.yaml.example << 'NOVAPOLICY'
+---
+# Nova RBAC Policy - Scope-aware
+"role:reader": "role:reader and system_scope:all"
+"role:member": "role:member and system_scope:all"
+"role:admin": "role:admin and system_scope:all"
+NOVAPOLICY
+chown nova:nova /etc/nova/policy.yaml.example
+chmod 640 /etc/nova/policy.yaml.example
+# For pre-Dalmatian (Bobcat/Caracal), uncomment these lines:
+# cp /etc/nova/policy.yaml.example /etc/nova/policy.yaml
+# sed -i "/^\[oslo_policy\]/a policy_file = /etc/nova/policy.yaml" /etc/nova/nova.conf
 
 # finalize installation
 
