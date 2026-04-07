@@ -642,7 +642,9 @@ export OS_IMAGE_API_VERSION=2" > admin-project-openrc
 		osadmin=admin-project-openrc  # Default to project-scoped
 		source $osadmin
 		openstack user create --domain default --password $MYUSER_PASS $myuser
-		echo "export OS_PROJECT_DOMAIN_NAME=Default
+		echo "# Clear system-scoped variables before setting project scope
+unset OS_SYSTEM_SCOPE
+export OS_PROJECT_DOMAIN_NAME=Default
 export OS_USER_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=myproject
 export OS_USERNAME=$myuser
@@ -803,12 +805,17 @@ echo "writing memcached config..."
 orig="/etc/sysconfig/memcached"
 save_config
 sed -i s/'OPTIONS="-l 127.0.0.1,::1"/OPTIONS="-l 127.0.0.1,::1,controller"'/ /etc/sysconfig/memcached
+
+echo "adding network wait drop-in..."
+mkdir -p /etc/systemd/system/memcached.service.d/
+echo -e "[Unit]\nAfter=network-online.target\nWants=network-online.target" > /etc/systemd/system/memcached.service.d/wait-for-network.conf
+
 echo "adding firewall rules..."
 firewall-cmd --add-port=11211/tcp --permanent
 firewall-cmd --reload
 
-
 echo "starting service..."
+systemctl daemon-reload
 systemctl enable --now memcached.service
 sed -i /memcachedstat/s/1/0/ resume_status
 
@@ -1017,22 +1024,32 @@ sed -i "/\[DEFAULT\]/a log_level = debug\nuse_journal = True" /etc/placement/pla
 sed -i "/^\[placement_database\]/a connection = mysql+pymysql://placement:$PLACEMENT_DBPASS@controller/placement" /etc/placement/placement.conf
 sed -i "/^\[api\]/a auth_strategy = keystone" /etc/placement/placement.conf
 sed -i "/^\[keystone_authtoken\]/a auth_url = $KEYSTONE_V3_ENDPOINT \nmemcached_servers = controller:11211 \nauth_type = password \nproject_domain_name = Default \nuser_domain_name = Default \nproject_name = service \nusername = placement \npassword = $PLACEMENT_PASS" /etc/placement/placement.conf
-# Configure oslo_policy for RBAC
+# Configure oslo_policy - Default for Dalmatian (2024.2) and later with secure RBAC
 sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/placement/placement.conf
-# For pre-Dalmatian releases (Bobcat, Caracal): Create policy file and enable it
-# Create policy example file (renamed to .example to prevent auto-loading)
-cat > /etc/placement/policy.json.example << 'PLACEMENTPOLICY'
-{
-  "role:reader": "role:reader and system_scope:all",
-  "role:member": "role:member and system_scope:all",
-  "role:admin": "role:admin and system_scope:all"
-}
-PLACEMENTPOLICY
-chown placement:placement /etc/placement/policy.json.example
-chmod 640 /etc/placement/policy.json.example
-# For pre-Dalmatian (Bobcat/Caracal), uncomment these lines:
-# cp /etc/placement/policy.json.example /etc/placement/policy.json
-# sed -i "/^\[oslo_policy\]/a policy_file = /etc/placement/policy.json" /etc/placement/placement.conf
+# For Bobcat/Caracal (pre-Dalmatian), uncomment the following section:
+# sed -i "s/enforce_scope = true/enforce_scope = false/" /etc/placement/placement.conf
+# sed -i "s/enforce_new_defaults = true/enforce_new_defaults = false/" /etc/placement/placement.conf
+# cat > /etc/placement/policy.yaml << 'PLACEMENTPOLICY'
+# ---
+# # Placement Policy - Bobcat (simple admin-based rules)
+# "context_is_admin": "role:admin"
+# "placement:resource_providers:list": "rule:context_is_admin"
+# "placement:resource_providers:show": "rule:context_is_admin"
+# "placement:resource_providers:create": "rule:context_is_admin"
+# "placement:resource_providers:update": "rule:context_is_admin"
+# "placement:resource_providers:delete": "rule:context_is_admin"
+# "placement:resource_classes:list": "rule:context_is_admin"
+# "placement:resource_classes:show": "rule:context_is_admin"
+# "placement:inventories:list": "rule:context_is_admin"
+# "placement:inventories:create": "rule:context_is_admin"
+# "placement:inventories:update": "rule:context_is_admin"
+# "placement:inventories:delete": "rule:context_is_admin"
+# "placement:allocations:manage": "rule:context_is_admin"
+# "placement:usages": "rule:context_is_admin"
+# PLACEMENTPOLICY
+# chown placement:placement /etc/placement/policy.yaml
+# chmod 640 /etc/placement/policy.yaml
+# sed -i "/^\[oslo_policy\]/a policy_file = /etc/placement/policy.yaml" /etc/placement/placement.conf
 orig="/etc/httpd/conf.d/00-placement-api.conf"
 sed -i '/^<Virtual/a \ \ <Directory /usr/bin>\n\tRequire all granted \n\ \ </Directory>' /etc/httpd/conf.d/00-placement-api.conf
 echo "adding firewall rules..."
@@ -1110,21 +1127,24 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.c
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
 # sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
-# Configure oslo_policy for RBAC
+# Configure oslo_policy - Default for Dalmatian (2024.2) and later with secure RBAC
 sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/nova/nova.conf
-# For pre-Dalmatian releases (Bobcat, Caracal): Create policy file and enable it
-# Create policy example file (renamed to .example to prevent auto-loading)
-cat > /etc/nova/policy.yaml.example << 'NOVAPOLICY'
----
-# Nova RBAC Policy - Scope-aware
-"role:reader": "role:reader and system_scope:all"
-"role:member": "role:member and system_scope:all"
-"role:admin": "role:admin and system_scope:all"
-NOVAPOLICY
-chown nova:nova /etc/nova/policy.yaml.example
-chmod 640 /etc/nova/policy.yaml.example
-# For pre-Dalmatian (Bobcat/Caracal), uncomment these lines:
-# cp /etc/nova/policy.yaml.example /etc/nova/policy.yaml
+# For Bobcat/Caracal (pre-Dalmatian), uncomment the following section:
+# sed -i "s/enforce_scope = true/enforce_scope = false/" /etc/nova/nova.conf
+# sed -i "s/enforce_new_defaults = true/enforce_new_defaults = false/" /etc/nova/nova.conf
+# cat > /etc/nova/policy.yaml << 'NOVAPOLICY'
+# ---
+# # Nova Policy - Bobcat (simple admin-based rules)
+# "context_is_admin": "role:admin"
+# "os_compute_api:servers:index": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:servers:show": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:servers:create": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:servers:delete": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:os-hypervisors:list": "rule:context_is_admin"
+# "os_compute_api:os-hypervisors:show": "rule:context_is_admin"
+# NOVAPOLICY
+# chown nova:nova /etc/nova/policy.yaml
+# chmod 640 /etc/nova/policy.yaml
 # sed -i "/^\[oslo_policy\]/a policy_file = /etc/nova/policy.yaml" /etc/nova/nova.conf
 echo "adding firewall rules..."
 firewall-cmd --add-port=8774/tcp --permanent
@@ -1192,21 +1212,24 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.c
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[libvirt\]/a virt_type = kvm\nvideo_image_meta_model = vga\nhw_machine_type = x86_64=q35\ncpu_mode = host-passthrough" /etc/nova/nova.conf
 sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
-# Configure oslo_policy for RBAC
+# Configure oslo_policy - Default for Dalmatian (2024.2) and later with secure RBAC
 sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/nova/nova.conf
-# For pre-Dalmatian releases (Bobcat, Caracal): Create policy file and enable it
-# Create policy example file (renamed to .example to prevent auto-loading)
-cat > /etc/nova/policy.yaml.example << 'NOVAPOLICY'
----
-# Nova RBAC Policy - Scope-aware
-"role:reader": "role:reader and system_scope:all"
-"role:member": "role:member and system_scope:all"
-"role:admin": "role:admin and system_scope:all"
-NOVAPOLICY
-chown nova:nova /etc/nova/policy.yaml.example
-chmod 640 /etc/nova/policy.yaml.example
-# For pre-Dalmatian (Bobcat/Caracal), uncomment these lines:
-# cp /etc/nova/policy.yaml.example /etc/nova/policy.yaml
+# For Bobcat/Caracal (pre-Dalmatian), uncomment the following section:
+# sed -i "s/enforce_scope = true/enforce_scope = false/" /etc/nova/nova.conf
+# sed -i "s/enforce_new_defaults = true/enforce_new_defaults = false/" /etc/nova/nova.conf
+# cat > /etc/nova/policy.yaml << 'NOVAPOLICY'
+# ---
+# # Nova Policy - Bobcat (simple admin-based rules)
+# "context_is_admin": "role:admin"
+# "os_compute_api:servers:index": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:servers:show": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:servers:create": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:servers:delete": "rule:context_is_admin or project_id:%(project_id)s"
+# "os_compute_api:os-hypervisors:list": "rule:context_is_admin"
+# "os_compute_api:os-hypervisors:show": "rule:context_is_admin"
+# NOVAPOLICY
+# chown nova:nova /etc/nova/policy.yaml
+# chmod 640 /etc/nova/policy.yaml
 # sed -i "/^\[oslo_policy\]/a policy_file = /etc/nova/policy.yaml" /etc/nova/nova.conf
 
 # finalize installation
@@ -1270,9 +1293,9 @@ openstack role add --project service --user cinder admin
 openstack role add --project service --user cinder service
 # System-scoped operations: service, endpoint
 openstack service create --name cinderv3 --description "OpenStack Block Storage" volumev3
-openstack endpoint create --region RegionOne volumev3 public http://controller:8776/v3/%\(project_id\)s
-openstack endpoint create --region RegionOne volumev3 internal http://controller:8776/v3/%\(project_id\)s
-openstack endpoint create --region RegionOne volumev3 admin http://controller:8776/v3/%\(project_id\)s
+openstack endpoint create --region RegionOne volumev3 public http://controller:8776/v3
+openstack endpoint create --region RegionOne volumev3 internal http://controller:8776/3
+openstack endpoint create --region RegionOne volumev3 admin http://controller:8776/v3
 
 # install and write config files
 echo "installing cinder packages..."

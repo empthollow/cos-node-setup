@@ -103,6 +103,10 @@ echo "restoring configs..."
 orig="/etc/sysconfig/memcached"
 restore_config
 
+# Remove network wait drop-in
+rm -rf /etc/systemd/system/memcached.service.d/
+systemctl daemon-reload
+
 # Remove firewall rule for Memcached
 echo "removing firewall rules..."
 firewall-cmd --remove-port=11211/tcp --permanent
@@ -222,8 +226,8 @@ dnf remove -y openstack-placement-api python3-osc-placement
 echo "restoring configs..."
 orig="/etc/placement/placement.conf"
 restore_config
-# Remove policy files (both example and active)
-rm -f /etc/placement/policy.json /etc/placement/policy.json.example
+# Remove policy file
+rm -f /etc/placement/policy.yaml
 echo "restoring configs..."
 orig="/etc/httpd/conf.d/00-placement-api.conf"
 restore_config
@@ -265,8 +269,8 @@ dnf remove -y openstack-nova-api openstack-nova-conductor openstack-nova-novncpr
 echo "restoring configs..."
 orig="/etc/nova/nova.conf"
 restore_config
-# Remove policy files (both example and active)
-rm -f /etc/nova/policy.yaml /etc/nova/policy.yaml.example
+# Remove policy file
+rm -f /etc/nova/policy.yaml
 # remove nova databases
 echo "removing database..."
 mysql -e "DROP DATABASE IF EXISTS nova_api;"
@@ -306,8 +310,8 @@ dnf remove -y openstack-nova-compute libvirt-daemon
 echo "restoring configs..."
 orig="/etc/nova/nova.conf"
 restore_config
-# Remove policy files (both example and active)
-rm -f /etc/nova/policy.yaml /etc/nova/policy.yaml.example
+# Remove policy file
+rm -f /etc/nova/policy.yaml
 
 # remove vnc proxy firewall rule
 echo "removing firewall rules"

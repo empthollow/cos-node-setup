@@ -56,37 +56,54 @@ When `openstack_passwords` exists, the script will rename the current file befor
 
 ## RBAC Policy Configuration
 
-### OpenStack Dalmatian (2024.2) and Later
+### Default: Dalmatian (2024.2) and Later
 
-By default, the script is configured for **Dalmatian and newer releases**, which have built-in scope-aware RBAC policies. No additional policy files are needed.
+By default, the script is configured for **Dalmatian (2024.2) and newer releases** using the modern secure RBAC model:
 
-### Pre-Dalmatian (Bobcat, Caracal)
+- `enforce_scope = true` - Enforces system vs project scope separation
+- `enforce_new_defaults = true` - Uses improved default policies
+- No custom policy files - Uses built-in scope-aware policies
 
-For releases **before Dalmatian**, you need to enable custom policy files for Nova and Placement:
+**This configuration works out-of-the-box** for Dalmatian and later deployments with enhanced security.
 
-1. **Edit the installation script** and uncomment the following lines:
+### Using with Bobcat/Caracal (Pre-Dalmatian)
 
-   **For Placement** (around line 1034-1035):
+For **Bobcat and Caracal** releases, you need to enable legacy policy mode because these versions don't fully support the new RBAC model:
+
+**Important**: Bobcat/Caracal don't support `enforce_scope=true`. Nova requires Placement to identify available resources, and mismatched RBAC settings will prevent instance scheduling.
+
+1. **Edit the installation script** and uncomment the legacy policy sections:
+
+   **For Placement** (in `placement_controller`, around lines 1023-1046):
    ```bash
-   cp /etc/placement/policy.json.example /etc/placement/policy.json
-   sed -i "/^\[oslo_policy\]/a policy_file = /etc/placement/policy.json" /etc/placement/placement.conf
+   # Uncomment all lines in the "For Bobcat/Caracal" section:
+   sed -i "s/enforce_scope = true/enforce_scope = false/" /etc/placement/placement.conf
+   sed -i "s/enforce_new_defaults = true/enforce_new_defaults = false/" /etc/placement/placement.conf
+   cat > /etc/placement/policy.yaml << 'PLACEMENTPOLICY'
+   # ... (uncomment entire policy file block)
    ```
 
-   **For Nova Controller** (around line 1127-1128):
+   **For Nova Controller** (in `nova_controller`, around lines 1114-1133):
    ```bash
-   cp /etc/nova/policy.yaml.example /etc/nova/policy.yaml
-   sed -i "/^\[oslo_policy\]/a policy_file = /etc/nova/policy.yaml" /etc/nova/nova.conf
+   # Uncomment all lines in the "For Bobcat/Caracal" section
+   sed -i "s/enforce_scope = true/enforce_scope = false/" /etc/nova/nova.conf
+   sed -i "s/enforce_new_defaults = true/enforce_new_defaults = false/" /etc/nova/nova.conf
+   cat > /etc/nova/policy.yaml << 'NOVAPOLICY'
+   # ... (uncomment entire policy file block)
    ```
 
-   **For Nova Compute** (around line 1209-1210):
+   **For Nova Compute** (in `nova_compute_node`, around lines 1196-1215):
    ```bash
-   cp /etc/nova/policy.yaml.example /etc/nova/policy.yaml
-   sed -i "/^\[oslo_policy\]/a policy_file = /etc/nova/policy.yaml" /etc/nova/nova.conf
+   # Uncomment all lines in the "For Bobcat/Caracal" section
+   # (same as Nova Controller)
    ```
 
-2. **Why this matters**: Pre-Dalmatian releases don't have complete scope-aware policy defaults. The custom policy files ensure proper RBAC enforcement with system-scoped credentials.
+2. **What changes**: 
+   - Disables scope enforcement (compatible with Bobcat/Caracal)
+   - Uses simple admin-based policy rules
+   - Creates custom policy files with basic access control
 
-3. **Note**: Policy files are created as `.example` to prevent automatic loading on Dalmatian+ where they would override improved built-in defaults.
+3. **Why this matters**: Pre-Dalmatian releases don't enforce scope separation and use different policy evaluation logic. The legacy configuration ensures services work together properly.
 
 ## Configuration Files
 
