@@ -1120,12 +1120,14 @@ sed -i "/^\[api_database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@cont
 sed -i "/^\[database\]/a connection = mysql+pymysql://nova:$NOVA_DBPASS@controller/nova" /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[cinder\]/a os_region_name = RegionOne\nauth_type = password\nauth_url = $KEYSTONE_V3_ENDPOINT\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = $KEYSTONE_V3_ENDPOINT\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[vnc\]/a enabled = true\nserver_listen = $controllerip\nserver_proxyclient_address = $controllerip" /etc/nova/nova.conf
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
 sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.conf
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[scheduler\]/a discover_hosts_in_cells_interval = 300" /etc/nova/nova.conf
+sed -i "s/#rpc_response_timeout=60/rpc_response_timeout = 120/" /etc/nova/nova.conf
 # sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
 # Configure oslo_policy - Default for Dalmatian (2024.2) and later with secure RBAC
 sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/nova/nova.conf
@@ -1205,6 +1207,7 @@ save_config
 sed -i "/^\[DEFAULT\]/a log_level = debug\nuse_journal = True\nenabled_apis = osapi_compute,metadata \ntransport_url = rabbit://openstack:$RABBIT_PASS@controller:5672\nmy_ip = $computeip\ncompute_driver = libvirt.LibvirtDriver"  /etc/nova/nova.conf
 sed -i "/^\[api\]/a \# ...\nauth_strategy = keystone" /etc/nova/nova.conf
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
+sed -i "/^\[cinder\]/a os_region_name = RegionOne\nauth_type = password\nauth_url = $KEYSTONE_V3_ENDPOINT\nproject_domain_name = Default\nuser_domain_name = Default\nproject_name = service\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[service_user\]/a send_service_user_token = true\nauth_url = $KEYSTONE_V3_ENDPOINT\nauth_strategy = keystone\nauth_type = password\nproject_domain_name = Default\nproject_name = service\nuser_domain_name = Default\nusername = nova\npassword = $NOVA_PASS" /etc/nova/nova.conf
 sed -i "/^\[vnc\]/a enabled = true\nserver_listen = 0.0.0.0\nserver_proxyclient_address = $computeip\nnovncproxy_base_url = http://controller:6080/vnc_auto.html" /etc/nova/nova.conf
 sed -i "/^\[glance\]/a api_servers = http://controller:9292" /etc/nova/nova.conf
@@ -1212,6 +1215,7 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/nova/tmp" /etc/nova/nova.c
 sed -i "/^\[placement\]/a region_name = RegionOne\nproject_domain_name = Default\nproject_name = service\nauth_type = password\nuser_domain_name = Default\nauth_url = $KEYSTONE_V3_ENDPOINT\nusername = placement\npassword = $PLACEMENT_PASS" /etc/nova/nova.conf
 sed -i "/^\[libvirt\]/a virt_type = kvm\nvideo_image_meta_model = vga\nhw_machine_type = x86_64=q35\ncpu_mode = host-passthrough" /etc/nova/nova.conf
 sed -i "/^\[os_vif_ovs\]/a ovsdb_connection = unix:/var/run/openvswitch/db.sock" /etc/nova/nova.conf
+sed -i "s/#resume_guests_state_on_host_boot=false/resume_guests_state_on_host_boot=true/" /etc/nova/nova.conf
 # Configure oslo_policy - Default for Dalmatian (2024.2) and later with secure RBAC
 sed -i "/^\[oslo_policy\]/a enforce_scope = true\nenforce_new_defaults = true" /etc/nova/nova.conf
 # For Bobcat/Caracal (pre-Dalmatian), uncomment the following section:
