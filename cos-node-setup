@@ -1249,6 +1249,20 @@ else
 	echo "================================================================================================="
 fi
 
+# Make nova-compute wait for blockstore iSCSI on boot
+mkdir -p /etc/systemd/system/openstack-nova-compute.service.d
+cat << EOF > /etc/systemd/system/openstack-nova-compute.service.d/wait-for-storage.conf
+[Unit]
+After=network-online.target iscsid.service libvirtd.service
+Wants=network-online.target iscsid.service
+
+[Service]
+ExecStartPre=/bin/bash -c "until timeout 2 bash -c '</dev/tcp/$blockstoreip/3260' 2>/dev/null; do echo 'Waiting for cos-blockstore iSCSI...'; sleep 3; done"
+ExecStartPre=/bin/sleep 10
+EOF
+
+systemctl daemon-reload
+
 # set services up
 echo "starting services..."
 systemctl enable libvirtd.service openstack-nova-compute.service
@@ -1382,8 +1396,48 @@ sed -i "/^\[oslo_concurrency\]/a lock_path = /var/lib/cinder/tmp" /etc/cinder/ci
 sed -i "/^\[keystone_authtoken\]/a www_authenticate_uri = $KEYSTONE_V3_ENDPOINT\nauth_url = $KEYSTONE_V3_ENDPOINT\nmemcached_servers = controller:11211\nauth_type = password\nproject_domain_name = default\nuser_domain_name = default\nproject_name = service\nusername = cinder\npassword = $CINDER_PASS" /etc/cinder/cinder.conf
 
 
+# Force target.service and cinder-volume to wait for LVM
+mkdir -p /etc/systemd/system/target.service.d
+cat << EOF > /etc/systemd/system/target.service.d/wait-for-lvm.conf
+[Unit]
+After=lvm2-monitor.service lvm2-activation.service lvm2-activation-early.service
+Wants=lvm2-monitor.service
+EOF
+
+mkdir -p /etc/systemd/system/openstack-cinder-volume.service.d
+cat << EOF > /etc/systemd/system/openstack-cinder-volume.service.d/ordering.conf
+[Unit]
+After=network-online.target lvm2-monitor.service target.service
+Wants=network-online.target lvm2-monitor.service target.service
+EOF
+
+# Auto-save targetcli configuration
+cat << EOF > /etc/systemd/system/targetcli-autosave.service
+[Unit]
+Description=Save LIO targetcli configuration
+After=target.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/targetcli saveconfig
+EOF
+
+cat << EOF > /etc/systemd/system/targetcli-autosave.timer
+[Unit]
+Description=Periodically persist LIO targetcli configuration
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+EOF
+
 # start and enable services
 echo "starting service..."
+systemctl daemon-reload
+systemctl enable --now targetcli-autosave.timer
 systemctl enable openstack-cinder-volume.service target.service
 systemctl start openstack-cinder-volume.service target.service
 
